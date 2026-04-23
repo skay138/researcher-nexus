@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ResearchNexus</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    .card {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 16px;
+      padding: 2.5rem;
+      width: 100%;
+      max-width: 680px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      margin-top: 3rem;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.75rem;
+    }
+    .header-left { display: flex; flex-direction: column; gap: 0.3rem; }
+
+    .badge {
+      display: inline-block;
+      background: #6366f1;
+      color: #fff;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 0.2rem 0.65rem;
+      border-radius: 999px;
+      width: fit-content;
+    }
+
+    h1 { font-size: 1.6rem; font-weight: 700; color: #f0f4ff; }
+
+    /* ── Session bar ── */
+    .session-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .session-label {
+      color: #4a5568;
+      font-size: 0.75rem;
+    }
+    .session-id {
+      color: #6366f1;
+      font-size: 0.75rem;
+      font-family: monospace;
+      background: #12142080;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+    }
+    .btn-reset {
+      background: transparent;
+      border: 1px solid #2d3148;
+      border-radius: 6px;
+      color: #8892a4;
+      cursor: pointer;
+      font-size: 0.75rem;
+      padding: 0.2rem 0.6rem;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .btn-reset:hover { border-color: #f56565; color: #fc8181; }
+
+    /* ── Chat history ── */
+    .chat {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      max-height: 420px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .chat:empty { display: none; }
+
+    .msg {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .msg-role {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .msg.user .msg-role { color: #6366f1; }
+    .msg.assistant .msg-role { color: #48bb78; }
+
+    .msg-body {
+      background: #0f1117;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      color: #c7d2fe;
+      font-size: 0.88rem;
+      line-height: 1.7;
+      padding: 0.75rem 1rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .msg.user .msg-body { color: #e2e8f0; border-color: #3d3f6a; }
+
+    .msg-body.streaming::after {
+      content: "▋";
+      animation: blink 0.7s steps(1) infinite;
+      color: #6366f1;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* ── Tool call chips ── */
+    .tool-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-top: 0.25rem;
+    }
+    .chip {
+      background: #1e2035;
+      border: 1px solid #3d3f6a;
+      border-radius: 999px;
+      color: #a5b4fc;
+      font-size: 0.72rem;
+      padding: 0.15rem 0.6rem;
+    }
+
+    /* ── Sources box ── */
+    .sources-box {
+      margin-top: 0.5rem;
+      background: #121420;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      font-size: 0.8rem;
+      color: #a5b4fc;
+    }
+    .sources-title {
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: #6366f1;
+    }
+    .source-item {
+      margin-bottom: 0.4rem;
+      line-height: 1.4;
+    }
+    .source-item:last-child {
+      margin-bottom: 0;
+    }
+    .source-path {
+      font-size: 0.7rem;
+      color: #4a5568;
+      margin-top: 0.1rem;
+      padding-left: 0.5rem;
+      border-left: 2px solid #2d3148;
+    }
+
+    /* ── Search box ── */
+    .search-box {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .search-box input {
+      flex: 1;
+      background: #0f1117;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-size: 0.9rem;
+      padding: 0.65rem 1rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .search-box input:focus { border-color: #6366f1; }
+    .search-box input::placeholder { color: #4a5568; }
+    .search-box input:disabled { opacity: 0.5; }
+
+    .btn-search {
+      background: #6366f1;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 0.65rem 1.25rem;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+    .btn-search:hover:not(:disabled) { background: #4f46e5; }
+    .btn-search:disabled { background: #3d3f5a; cursor: not-allowed; }
+
+    /* ── Footer links ── */
+    .links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      margin-top: 1.5rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid #2d3148;
+    }
+    .links a {
+      background: #0f1117;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      color: #8892a4;
+      font-size: 0.78rem;
+      padding: 0.4rem 0.9rem;
+      text-decoration: none;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .links a:hover { border-color: #6366f1; color: #c7d2fe; }
+
+    .status-dot {
+      display: inline-block;
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #4a5568;
+      margin-right: 5px;
+      vertical-align: middle;
+      transition: background 0.3s;
+    }
+    .status-dot.ok  { background: #48bb78; }
+    .status-dot.err { background: #f56565; }
+
+    /* ── Scrollbar ── */
+    .chat::-webkit-scrollbar { width: 4px; }
+    .chat::-webkit-scrollbar-track { background: transparent; }
+    .chat::-webkit-scrollbar-thumb { background: #2d3148; border-radius: 2px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-left">
+        <div class="badge">ResearchNexus</div>
+        <h1>연구 데이터 검색</h1>
+      </div>
+      <div class="session-bar">
+        <span class="session-label">세션</span>
+        <span class="session-id" id="session-display"></span>
+        <button class="btn-reset" onclick="resetSession()" title="세션 초기화">↺ 초기화</button>
+      </div>
+    </div>
+
+    <!-- Chat history -->
+    <div class="chat" id="chat"></div>
+
+    <!-- Search input -->
+    <div class="search-box">
+      <input id="query" type="text"
+             placeholder="예: 해양 에너지 관련 특허를 발명한 연구자는?" />
+      <button class="btn-search" id="btn" onclick="search()">검색</button>
+    </div>
+
+    <!-- Footer links -->
+    <div class="links">
+      <a href="/docs">📄 API Docs</a>
+      <a href="/redoc">📘 ReDoc</a>
+      <a href="/api/v1/health"><span class="status-dot" id="dot"></span>Health</a>
+      <a href="/api/v1/schema">🗂 Schema</a>
+    </div>
+  </div>
+
+  <script>
+    // ── Session management ────────────────────────────────────────────────────
+    let sessionId = newSessionId();
+
+    function newSessionId() {
+      return "web-" + Math.random().toString(36).slice(2, 10);
+    }
+
+    function renderSessionId() {
+      document.getElementById("session-display").textContent = sessionId;
+    }
+
+    function resetSession() {
+      if (!confirm("세션을 초기화하면 대화 기록이 모두 삭제됩니다. 계속할까요?")) return;
+      sessionId = newSessionId();
+      renderSessionId();
+      document.getElementById("chat").innerHTML = "";
+    }
+
+    renderSessionId();
+
+    // ── Health check ─────────────────────────────────────────────────────────
+    fetch("/api/v1/health")
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById("dot").className =
+          "status-dot " + (d.status === "ok" ? "ok" : "err");
+      })
+      .catch(() => {
+        document.getElementById("dot").className = "status-dot err";
+      });
+
+    // ── Chat helpers ─────────────────────────────────────────────────────────
+    function appendUserMessage(text) {
+      const chat = document.getElementById("chat");
+      const div = document.createElement("div");
+      div.className = "msg user";
+      div.innerHTML = `<div class="msg-role">You</div>
+                       <div class="msg-body">${escHtml(text)}</div>`;
+      chat.appendChild(div);
+      scrollChat();
+    }
+
+    function createAssistantMessage() {
+      const chat = document.getElementById("chat");
+      const div = document.createElement("div");
+      div.className = "msg assistant";
+      div.innerHTML = `<div class="msg-role">ResearchNexus</div>
+                       <div class="tool-chips" id="chips"></div>
+                       <div class="msg-body streaming" id="answer-body"></div>
+                       <div class="sources-box" id="sources-box" style="display: none;"></div>`;
+      chat.appendChild(div);
+      scrollChat();
+      return {
+        body: div.querySelector("#answer-body"),
+        chips: div.querySelector("#chips"),
+        sourcesBox: div.querySelector("#sources-box"),
+      };
+    }
+
+    function addToolChip(chips, toolName) {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.textContent = "⚙ " + toolName;
+      chips.appendChild(chip);
+    }
+
+    function scrollChat() {
+      const chat = document.getElementById("chat");
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function escHtml(s) {
+      return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    // ── Search ────────────────────────────────────────────────────────────────
+    async function search() {
+      const input = document.getElementById("query");
+      const query = input.value.trim();
+      if (!query) return;
+
+      const btn = document.getElementById("btn");
+      btn.disabled = true;
+      btn.textContent = "검색 중…";
+      input.disabled = true;
+      input.value = "";
+
+      appendUserMessage(query);
+      const { body: answerBody, chips, sourcesBox } = createAssistantMessage();
+
+      try {
+        const res = await fetch("/api/v1/agent/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query, session_id: sessionId }),
+        });
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let text = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          for (const line of decoder.decode(value).split("\n")) {
+            if (!line.startsWith("data: ")) continue;
+            try {
+              const payload = JSON.parse(line.slice(6));
+              if (payload.type === "tool_call") {
+                addToolChip(chips, payload.tool);
+              } else if (payload.type === "token") {
+                text += payload.content;
+                answerBody.textContent = text;
+                scrollChat();
+              } else if (payload.type === "done") {
+                if (payload.sources && payload.sources.length > 0) {
+                  sourcesBox.style.display = "block";
+                  let html = `<div class="sources-title">[출처]</div>`;
+                  payload.sources.forEach(s => {
+                    const authorsStr = (s.authors && s.authors.length > 0) ? s.authors.join(", ") : "저자/참여자 정보 없음";
+                    const yearStr = s.year ? ` (${s.year})` : "";
+                    const typeStr = s.type || "Unknown";
+                    html += `<div class="source-item">
+                               <div>[${s.no}] (${typeStr}) ${escHtml(s.name)}${escHtml(yearStr)} — ${escHtml(authorsStr)}</div>`;
+                    if (s.path) {
+                      html += `<div class="source-path">└ 탐색 경로: ${escHtml(s.path)}</div>`;
+                    }
+                    html += `</div>`;
+                  });
+                  sourcesBox.innerHTML = html;
+                  scrollChat();
+                }
+              }
+            } catch { /* non-JSON line */ }
+          }
+        }
+
+        if (!text) answerBody.textContent = "(응답 없음)";
+      } catch (e) {
+        answerBody.textContent = "오류: " + e.message;
+      } finally {
+        answerBody.classList.remove("streaming");
+        btn.disabled = false;
+        btn.textContent = "검색";
+        input.disabled = false;
+        input.focus();
+        scrollChat();
+      }
+    }
+
+    document.getElementById("query").addEventListener("keydown", e => {
+      if (e.key === "Enter" && !e.shiftKey) search();
+    });
+  </script>
+</body>
+</html>

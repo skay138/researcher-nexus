@@ -1,0 +1,32 @@
+# ── Core ─────────────────────────────────────────────────────────────────────
+pydantic>=2.0
+pydantic-settings>=2.0         # Settings 관리 (신규)
+langchain-core>=0.2
+langgraph>=0.1
+
+# ── LLM Providers ─────────────────────────────────────────────────────────────
+langchain-anthropic>=0.1       # Claude (선택)
+langchain-ollama>=0.1          # Local LLM / Llama, Qwen (선택)
+
+# ── API Server ────────────────────────────────────────────────────────────────
+fastapi>=0.100                 # REST API (신규)
+uvicorn[standard]>=0.23        # ASGI 서버 (신규)
+sse-starlette>=1.6             # Server-Sent Events 스트리밍 (신규)
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+python-json-logger>=2.0        # JSON 구조화 로깅 (신규)
+
+# ── Cache ─────────────────────────────────────────────────────────────────────
+redis>=5.0                     # 선택적 Redis 캐시 (CACHE_BACKEND=redis 시) (신규)
+
+# ── DB (선택) ─────────────────────────────────────────────────────────────────
+neo4j>=5.0                     # Graph DB
+pymilvus>=2.3                  # Vector DB
+psycopg2-binary>=2.9           # PostgreSQL (RDB)
+
+# ── Semantic Pruning (선택, 없으면 truncate fallback) ─────────────────────────
+sentence-transformers>=2.2
+
+# ── Dev / Test ────────────────────────────────────────────────────────────────
+pytest>=7.0
+httpx>=0.24                    # FastAPI TestClient 의존성
