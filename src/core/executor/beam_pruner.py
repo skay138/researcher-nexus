@@ -44,6 +44,7 @@ class BeamPruner:
         query_context: str,
         node_text_fetcher: Callable[[List[str]], List[str]],
         beam_width: Optional[int] = None,
+        score_threshold: Optional[float] = None,
     ) -> List[str]:
         """
         Args:
@@ -64,7 +65,7 @@ class BeamPruner:
             return self._fallback(node_ids, bw)
 
         try:
-            return self._semantic_prune(node_ids, query_context, node_text_fetcher, bw)
+            return self._semantic_prune(node_ids, query_context, node_text_fetcher, bw, score_threshold)
         except Exception as e:
             logger.warning("BeamPruner semantic prune failed: %s", e)
             return self._fallback(node_ids, bw)
@@ -79,6 +80,7 @@ class BeamPruner:
         query_context: str,
         node_text_fetcher: Callable,
         beam_width: int,
+        score_threshold: Optional[float] = None,
     ) -> List[str]:
         import numpy as np
 
@@ -94,9 +96,13 @@ class BeamPruner:
         # 코사인 유사도 (정규화된 벡터이므로 내적 = cosine)
         scores: "np.ndarray" = node_vecs @ query_vec
 
-        # 상위 beam_width개 인덱스
+        # 상위 beam_width개 인덱스 중 임계값 이상인 것만 필터링
         top_k = min(beam_width, len(node_ids))
         top_indices = scores.argsort()[-top_k:][::-1]
+        
+        if score_threshold is not None:
+            top_indices = [i for i in top_indices if scores[i] >= score_threshold]
+            
         pruned = [node_ids[i] for i in top_indices]
 
         elapsed = time.time() - t0

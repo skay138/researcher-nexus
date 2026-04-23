@@ -173,6 +173,7 @@ class ExecutionEngine:
                 exclude_ids=list(traversal_history_ids),
                 provenance=provenance,
                 beam_width=beam_width,
+                score_threshold=vector_score_threshold,
             )
             if not current_ids:
                 logger.warning("Hop %d returned no results, stopping.", hop_idx)
@@ -268,6 +269,7 @@ class ExecutionEngine:
         exclude_ids:   Optional[List[str]] = None,
         provenance:    Optional[Dict[str, str]] = None,
         beam_width:    Optional[int] = None,
+        score_threshold: Optional[float] = None,
     ) -> List[str]:
         cache_key = make_cache_key(
             "hop", {"hop": hop.model_dump(), "ids": sorted(start_ids), "ctx": query_context, "ex": sorted(exclude_ids or [])}
@@ -295,7 +297,7 @@ class ExecutionEngine:
         # L3: BeamPruner 의미적 압축 (내부에서 fetch_texts 호출 포함)
         with _timed(stats, f"L3 | BeamPrune      hop {hop_idx + 1}", before=before):
             result_ids = self.pruner.prune(result_ids, query_context, self.fetch_texts_fn,
-                                           beam_width=beam_width)
+                                           beam_width=beam_width, score_threshold=score_threshold)
         stats.pruned_total += max(0, before - len(result_ids))
         stats.hop_counts.append(len(result_ids))
 

@@ -14,7 +14,7 @@ _DEFAULTS: Dict[str, Any] = {
     # Core settings
     "beam_width":             50,
     "max_results":            20,
-    "vector_score_threshold": 0.3,
+    "vector_score_threshold": 0.6,
     # LLM settings
     "model":                  "qwen2.5:14b",
     "temperature":            0.0,
