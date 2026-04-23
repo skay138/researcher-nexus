@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     environment: Literal["development", "production"] = "development"
     api_host: str = "0.0.0.0"
-    api_port: int = 8000
+    api_port: int = 5000
     api_cors_origins: list[str] = ["*"]
 
     if SettingsConfigDict is not None:

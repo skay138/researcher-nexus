@@ -182,11 +182,12 @@ pytest tests/ -v
 
 | 서비스 | 포트 | 용도 |
 |--------|------|------|
-| **api** | **8000** | **FastAPI 서버** |
-| Neo4j | 7687 (Bolt) / 7474 (UI) | 그래프 DB |
-| Milvus | 19530 | 벡터 DB |
-| Redis | 6379 | 쿼리 캐시 |
-| MinIO | 9001 (UI) | Milvus 오브젝트 스토리지 |
+| **api** | **5000** | **FastAPI 서버** |
+| Ollama | 5434 | LLM 추론 엔진 |
+| Neo4j | 5687 (Bolt) / 5474 (UI) | 그래프 DB |
+| Milvus | 5530 | 벡터 DB |
+| Redis | 5379 | 쿼리 캐시 |
+| MinIO | 5001 (UI) | Milvus 오브젝트 스토리지 |
 | etcd | — (내부) | Milvus 메타데이터 |
 
 ```bash
@@ -195,7 +196,7 @@ docker compose up -d
 
 # Milvus GUI (선택)
 docker compose --profile tools up -d
-# → http://localhost:8080
+# → http://localhost:5080
 
 # 중지 (데이터 유지)
 docker compose down
@@ -220,7 +221,7 @@ POST /api/v1/engine/search    — QueryPlan 직접 실행 (동기)
 **에이전트 쿼리 예시**
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/agent/query \
+curl -X POST http://localhost:5000/api/v1/agent/query \
   -H "Content-Type: application/json" \
   -d '{"query": "보트 관련 논문을 쓴 연구자의 소속 기관은?", "session_id": "test-1"}' \
   --no-buffer
@@ -229,7 +230,7 @@ curl -X POST http://localhost:8000/api/v1/agent/query \
 **요청별 파라미터 오버라이드 예시**
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/agent/query \
+curl -X POST http://localhost:5000/api/v1/agent/query \
   -H "Content-Type: application/json" \
   -d '{
     "query": "해양 에너지 관련 특허를 발명한 연구자",
