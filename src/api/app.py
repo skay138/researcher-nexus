@@ -66,12 +66,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Agent app은 LLM 연결이 필요하므로 초기화 실패 시 degraded 모드로 기동
     try:
-        agent_app, _ = _create_app(
-            neo4j_driver=neo4j_driver,
-            milvus_client=milvus_client,
+        from app_factory import make_config_service
+        cfg = make_config_service()
+        app.state.config_service = cfg
+
+        app.state.agent_app = _create_app(
+            engine=engine,
+            config_service=cfg,
             settings=settings,
         )
-        app.state.agent_app = agent_app
         logger.info("agent_app_initialized", extra={"llm_base_url": settings.llm_base_url})
     except Exception as e:
         app.state.agent_app = None

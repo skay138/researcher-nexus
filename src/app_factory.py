@@ -153,50 +153,36 @@ def create_engine(
 
 
 def create_app(
-    neo4j_driver=None,
-    milvus_client=None,
-    config_service: Optional[ConfigService] = None,
-    llm_base_url: str = "http://localhost:11434",
-    settings=None,
+    engine,
+    config_service,
+    settings,
 ):
     """
     LangGraph 에이전트 앱 생성.
-    core/LLM 기본 설정은 config_service(DB)에서 읽는다.
-
     Returns:
-        (app, run_fn, config_service) 튜플
+        app (CompiledGraph)
     """
-    if settings is not None:
-        llm_base_url = settings.llm_base_url
+    from services.agent_graph import build_graph
 
-    cfg = config_service or make_config_service()
-
-    from services.agent_graph import build_graph, run_query
-
-    engine = create_engine(
-        neo4j_driver=neo4j_driver,
-        milvus_client=milvus_client,
-        config_service=cfg,
-        settings=settings,
-    )
     schema_registry = engine.compiler.schema_registry
 
-    model       = cfg.get_default("model")
-    temperature = cfg.get_default("temperature")
+    model       = config_service.get_default("model")
+    temperature = config_service.get_default("temperature")
 
     llm = make_llm(
         provider    = settings.llm_provider if settings else "ollama",
         model       = model,
         temperature = temperature,
-        base_url    = settings.llm_base_url if settings else llm_base_url,
+        base_url    = settings.llm_base_url,
     )
 
-    max_tool_calls = cfg.get_default("max_tool_calls")
+    max_tool_calls = config_service.get_default("max_tool_calls")
     app = build_graph(schema_registry=schema_registry, llm=llm, max_tool_calls=max_tool_calls)
+    
     logger.info(
         "LangGraph Agent 준비 완료 (provider=%s, base_url=%s, model=%s, max_tool_calls=%d)",
         settings.llm_provider if settings else "ollama",
-        settings.llm_base_url if settings else llm_base_url,
+        settings.llm_base_url,
         model, max_tool_calls,
     )
-    return app, lambda query, session_id="default": run_query(app, query, session_id), cfg
+    return app

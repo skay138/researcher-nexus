@@ -43,7 +43,7 @@ class CypherCompiler:
     HOP_FANOUT_LIMIT: int = 500
 
     def __init__(self, schema_registry: SchemaRegistry):
-        self.schema = schema_registry
+        self.schema_registry = schema_registry
 
     # ------------------------------------------------------------------ #
     # Public
@@ -145,7 +145,7 @@ class CypherCompiler:
 
     def _resolve_relation(self, hop: HopSpec) -> str:
         try:
-            return self.schema.resolve_relation(hop.relation_concept)
+            return self.schema_registry.resolve_relation(hop.relation_concept)
         except ValueError as e:
             raise UnknownRelationConcept(str(e)) from e
 
