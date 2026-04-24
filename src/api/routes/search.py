@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -23,7 +23,7 @@ from api.schemas import (
 )
 from common.exceptions import LangGraphBaseError
 from common.query_plan import QueryPlan
-from common.config_service import QueryConfig
+from common.query_config import QueryConfig, RequestConfig
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Search"])
@@ -47,24 +47,28 @@ async def agent_query(body: AgentQueryRequest, request: Request):
     """
     agent_app = getattr(request.app.state, "agent_app", None)
     settings = request.app.state.settings
-    config_service = getattr(request.app.state, "config_service", None)
+    repo = getattr(request.app.state, "repo", None)
 
     if agent_app is None:
         raise HTTPException(status_code=503, detail="Agent not initialized")
 
     correlation_id = getattr(request.state, "correlation_id", "-")
 
-    # API 파라미터 → DB 기본값 순으로 설정값 결정
+    # API 파라미터 → repo 기본값 → 내장 기본값 순으로 설정값 결정
     api_cfg = None
     if body.config:
         api_cfg = QueryConfig(
             beam_width=body.config.beam_width,
             max_results=body.config.max_results,
+            sparse_weight=body.config.sparse_weight,
+            dense_weight=body.config.dense_weight,
+            entry_min_score=body.config.entry_min_score,
+            entry_score_ratio=body.config.entry_score_ratio,
             model=body.config.model,
             temperature=body.config.temperature,
             max_tool_calls=body.config.max_tool_calls,
         )
-    resolved = config_service.resolve(api_cfg) if config_service else api_cfg
+    resolved = RequestConfig._resolve(repo, api_cfg)
 
     logger.info(
         "agent_query_start",
@@ -76,19 +80,22 @@ async def agent_query(body: AgentQueryRequest, request: Request):
     )
 
     return EventSourceResponse(
-        _stream_agent(agent_app, body, settings, resolved),
+        _stream_agent(agent_app, body, settings, query_config=resolved),
         media_type="text/event-stream",
     )
 
 
 async def _stream_agent(
     agent_app, body: AgentQueryRequest, settings,
-    config: Optional[QueryConfig] = None,
+    query_config: Optional[QueryConfig] = None,
 ) -> AsyncGenerator[str, None]:
     """app.stream()을 SSE 이벤트로 변환하는 비동기 제너레이터."""
     from langchain_core.messages import HumanMessage
 
-    max_tool_calls = config.max_tool_calls if config and config.max_tool_calls else 3
+    # 요청별 resolved config + 원본 쿼리 등록 → 도구 실행 시 RequestConfig.current()로 접근
+    RequestConfig.set_current(query_config, original_query=body.query)
+
+    max_tool_calls = (query_config.max_tool_calls if query_config and query_config.max_tool_calls else 3)
 
     initial_state = {
         "messages":        [HumanMessage(content=body.query)],
@@ -98,7 +105,7 @@ async def _stream_agent(
         "start_time":      time.time(),
         "max_tool_calls":  max_tool_calls,
     }
-    config = {
+    run_config = {
         "configurable": {"thread_id": body.session_id},
         "recursion_limit": settings.recursion_limit,
     }
@@ -107,7 +114,7 @@ async def _stream_agent(
 
     try:
         async for msg_chunk, metadata in agent_app.astream(
-            initial_state, config=config, stream_mode="messages"
+            initial_state, config=run_config, stream_mode="messages"
         ):
             node = metadata.get("langgraph_node")
             if node not in ["Planner", "Agent"]:
@@ -134,7 +141,7 @@ async def _stream_agent(
         answer = "".join(answer_parts) or "(응답 없음)"
         
         # 도구 실행 결과를 바탕으로 출처(sources) 추출
-        current_state = agent_app.get_state(config)
+        current_state = agent_app.get_state(run_config)
         all_messages = current_state.values.get("messages", [])
         
         from langchain_core.messages import ToolMessage
@@ -173,7 +180,7 @@ async def engine_search(body: EngineSearchRequest, request: Request):
     LLM 없이 Core Engine만 사용.
     """
     engine = getattr(request.app.state, "engine", None)
-    config_service = getattr(request.app.state, "config_service", None)
+    repo = getattr(request.app.state, "repo", None)
     if engine is None:
         raise HTTPException(status_code=503, detail="Engine not initialized")
 
@@ -183,7 +190,7 @@ async def engine_search(body: EngineSearchRequest, request: Request):
             beam_width=body.config.beam_width,
             max_results=body.config.max_results,
         )
-    resolved = config_service.resolve(api_cfg) if config_service else api_cfg
+    resolved = RequestConfig._resolve(repo, api_cfg)
 
     try:
         plan = QueryPlan.model_validate(body.plan)

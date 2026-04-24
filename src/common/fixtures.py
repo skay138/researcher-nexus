@@ -92,6 +92,22 @@ SEED_NODES: Dict[str, Dict[str, Any]] = {
         "keywords": "LNG 이중연료 엔진 배출가스",
     },
 
+    "r_chung_ship": {
+        "id": "r_chung_ship", "type": "Researcher",
+        "name": "정선박",
+        "expertise": "소형 선박 보트 선형 설계 레저보트 유체역학 추진 성능",
+        "topic": "보트 소형선박",
+    },
+
+    # Papers
+    "paper_boat_design": {
+        "id": "paper_boat_design", "type": "Paper",
+        "name": "레저 보트 선형 및 추진 성능 최적화 설계",
+        "year": 2024,
+        "abstract": "CFD 시뮬레이션을 활용한 레저 보트 선형 최적화 및 전기 추진 시스템 성능 향상 연구.",
+        "keywords": "보트 선형 레저보트 추진 CFD 소형선박",
+    },
+
     # Patents
     "patent_ship_nav": {
         "id": "patent_ship_nav", "type": "Patent",
@@ -424,6 +440,7 @@ SEED_RELATIONS: Dict[str, List[Dict[str, str]]] = {
         # 해양
         {"from": "r_kim_ocean",     "to": "org_kaist_ocean"},
         {"from": "r_lee_maritime",  "to": "org_kriso"},
+        {"from": "r_chung_ship",    "to": "org_kriso"},
         {"from": "r_park_ocean",    "to": "org_samsung_heavy"},
         # AI/바이오
         {"from": "r_choi_bio",      "to": "org_bio_kaist"},
@@ -467,6 +484,7 @@ SEED_RELATIONS: Dict[str, List[Dict[str, str]]] = {
         {"from": "r_lee_maritime",  "to": "paper_ship_ai"},
         {"from": "r_kim_ocean",     "to": "paper_ship_ai"},
         {"from": "r_park_ocean",    "to": "paper_lng_propulsion"},
+        {"from": "r_chung_ship",    "to": "paper_boat_design"},
         # AI/바이오
         {"from": "r_choi_bio",      "to": "paper_gnn_drug"},
         {"from": "r_choi_bio",      "to": "paper_alphafold_rare"},

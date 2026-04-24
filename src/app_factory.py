@@ -13,8 +13,8 @@ from core.compiler.cypher_compiler import CypherCompiler
 from core.executor.beam_pruner import BeamPruner
 from core.executor.execution_engine import ExecutionEngine
 from common.cache import make_cache
-from common.config_service import ConfigService
-from infrastructure.config_repository import MockConfigRepository
+from common.query_config import RequestConfig
+from infrastructure.config_repository import MemoryConfigRepository
 from services.semantic_tools import set_engine
 
 logger = logging.getLogger(__name__)
@@ -72,28 +72,28 @@ def _open_milvus(settings) -> object:
     return client
 
 
-def make_config_service(overrides=None) -> ConfigService:
-    """ConfigService 생성. 실제 RDB 연동 전까지 MockConfigRepository 사용."""
-    return ConfigService(MockConfigRepository(overrides))
+def make_config_repo(overrides=None) -> MemoryConfigRepository:
+    """ConfigRepository 생성. 실제 RDB 연동 전까지 MemoryConfigRepository 사용."""
+    return MemoryConfigRepository(overrides)
 
 
 def create_engine(
     neo4j_driver=None,
     milvus_client=None,
-    config_service: Optional[ConfigService] = None,
+    config_repo=None,
     settings=None,
 ) -> ExecutionEngine:
     """
     실행 엔진 생성 (LangGraph 없이도 사용 가능).
     neo4j_driver / milvus_client 미전달 시 settings에서 자동 연결.
-    core/LLM 기본 설정은 config_service(DB)에서 읽는다.
+    core/LLM 기본 설정은 config_repo(DB)에서 읽는다.
     """
     if settings is None:
         from common.settings import get_settings
         settings = get_settings()
 
-    cfg = config_service or make_config_service()
-    beam_width = cfg.get_default("beam_width")
+    repo = config_repo or make_config_repo()
+    beam_width = RequestConfig._resolve(repo).beam_width
 
     if neo4j_driver is None:
         neo4j_driver = _open_neo4j(settings)
@@ -103,36 +103,23 @@ def create_engine(
     schema_registry = SchemaRegistry(driver=neo4j_driver)
     compiler = CypherCompiler(schema_registry=schema_registry)
 
-    st_model = getattr(settings, "sentence_transformer_model",
-                       "snunlp/KR-SBERT-V40K-klueNLI-augSTS")
-    try:
-        from sentence_transformers import SentenceTransformer
-        vectorizer = SentenceTransformer(st_model)
-        logger.info("SentenceTransformer loaded: %s", st_model)
-    except ImportError:
-        vectorizer = None
-        logger.warning("sentence-transformers 미설치 — BeamPruner fallback 모드")
+    st_model = settings.sentence_transformer_model
+    from sentence_transformers import SentenceTransformer
+    vectorizer = SentenceTransformer(st_model)
+    logger.info("SentenceTransformer loaded: %s", st_model)
 
-    if vectorizer is None:
-        raise RuntimeError(
-            "sentence-transformers가 필요합니다: pip install sentence-transformers"
-        )
-
-    pruner = BeamPruner(vectorizer=vectorizer, beam_width=beam_width)
+    pruner = BeamPruner(beam_width=beam_width)
 
     cache = make_cache(
         redis_url=settings.redis_url,
         ttl=settings.cache_ttl_seconds,
     )
 
-    from infrastructure.neo4j import (
-        make_graph_query_fn, make_fetch_details_fn, make_fetch_texts_fn,
-    )
+    from infrastructure.neo4j import make_graph_query_fn, make_fetch_details_fn
     from infrastructure.milvus import make_vector_search_fn
 
     graph_fn   = make_graph_query_fn(neo4j_driver)
     details_fn = make_fetch_details_fn(neo4j_driver)
-    texts_fn   = make_fetch_texts_fn(neo4j_driver)
     vector_fn  = make_vector_search_fn(
         milvus_client,
         embedding_fn=vectorizer.encode,
@@ -145,7 +132,6 @@ def create_engine(
         vector_search_fn=vector_fn,
         graph_query_fn=graph_fn,
         fetch_details_fn=details_fn,
-        fetch_texts_fn=texts_fn,
         cache=cache,
     )
     set_engine(engine)
@@ -154,7 +140,7 @@ def create_engine(
 
 def create_app(
     engine,
-    config_service,
+    config_repo,
     settings,
 ):
     """
@@ -165,24 +151,21 @@ def create_app(
     from services.agent_graph import build_graph
 
     schema_registry = engine.compiler.schema_registry
-
-    model       = config_service.get_default("model")
-    temperature = config_service.get_default("temperature")
+    defaults = RequestConfig._resolve(config_repo)
 
     llm = make_llm(
         provider    = settings.llm_provider if settings else "ollama",
-        model       = model,
-        temperature = temperature,
+        model       = defaults.model,
+        temperature = defaults.temperature,
         base_url    = settings.llm_base_url,
     )
 
-    max_tool_calls = config_service.get_default("max_tool_calls")
-    app = build_graph(schema_registry=schema_registry, llm=llm, max_tool_calls=max_tool_calls)
+    app = build_graph(schema_registry=schema_registry, llm=llm, max_tool_calls=defaults.max_tool_calls)
     
     logger.info(
         "LangGraph Agent 준비 완료 (provider=%s, base_url=%s, model=%s, max_tool_calls=%d)",
         settings.llm_provider if settings else "ollama",
         settings.llm_base_url,
-        model, max_tool_calls,
+        defaults.model, defaults.max_tool_calls,
     )
     return app

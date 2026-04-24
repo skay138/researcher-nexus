@@ -82,13 +82,15 @@ def seed_milvus(client, embedding_fn, clear: bool = False) -> None:
     ensure_collection(client)
 
     # 임베딩 생성
+    # name을 앞에 배치: 짧은 쿼리와의 유사도 향상 (bi-encoder 특성상 title이 검색 신호에 더 강함)
     ids, texts, node_types, years = [], [], [], []
     for node_id, props in SEED_NODES.items():
-        text = (props.get("text") or props.get("abstract")
-                or props.get("summary") or props.get("name", ""))
+        name = props.get("name", "")
+        body = (props.get("text") or props.get("abstract")
+                or props.get("summary") or "")
         extra = " ".join(str(props.get(k, "")) for k in
                          ("topic", "expertise", "keywords") if props.get(k))
-        full_text = f"{text} {extra}".strip()
+        full_text = " ".join(filter(None, [name, body, extra]))
 
         ids.append(node_id)
         texts.append(full_text)
@@ -98,9 +100,10 @@ def seed_milvus(client, embedding_fn, clear: bool = False) -> None:
     logger.info("임베딩 생성 중 (%d개)...", len(texts))
     vectors = embedding_fn(texts)
 
+    # text 필드: BM25 전문검색용 원본 텍스트 (sparse 벡터는 Milvus가 자동 생성)
     data = [
-        {"id": nid, "node_type": nt, "year": yr, "vector": vec.tolist()}
-        for nid, nt, yr, vec in zip(ids, node_types, years, vectors)
+        {"id": nid, "node_type": nt, "year": yr, "text": txt, "dense": vec.tolist()}
+        for nid, nt, yr, txt, vec in zip(ids, node_types, years, texts, vectors)
     ]
     client.insert(collection_name=COLLECTION_NAME, data=data)
     client.flush(collection_name=COLLECTION_NAME)

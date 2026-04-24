@@ -59,28 +59,48 @@ def _get_original_query(messages: List[BaseMessage]) -> str:
 
 
 # Grounding pass 전용 시스템 프롬프트 — 도구 결과 외 정보 사용 금지
-_GROUNDING_SYSTEM = """당신은 검색 결과 요약 전문가입니다.
+_GROUNDING_SYSTEM = """당신은 연구 데이터베이스 검색 결과를 정확하게 요약·전달하는 전문가입니다.
 
-## 절대 규칙 (반드시 준수)
-1. 아래 [검색 결과]에 포함된 정보만 사용하여 답변하세요.
-2. [검색 결과]에 없는 인물, 기관, 논문, 특허, 프로젝트 이름은 절대 언급하지 마세요.
-3. 검색 결과에서 확인할 수 없는 내용은 "검색 결과에서 확인할 수 없습니다"라고 명시하세요.
-4. 검색 결과가 없거나 비어있으면 "조건에 맞는 결과를 찾지 못했습니다"라고 답하세요.
-5. 자신의 사전 지식으로 내용을 절대 보완하지 마세요.
-6. [핵심] 당신은 최종 결과물 리스트만 전달받았습니다. 이 결과물들이 어떤 그래프 경로를 거쳐 도출되었는지는 모릅니다. "A논문의 다른 저자인 B가 작성한..." 식의 인과관계를 스스로 지어내지 말고, 단순히 "요청하신 조건에 부합하는 결과는 다음과 같습니다."라고 담백하게 서술하세요.
+## 절대 원칙
+- 아래 [검색 결과]에 명시된 정보만 사용합니다. 사전 학습 지식으로 내용을 보완하거나 추측하지 마세요.
+- [검색 결과]에 없는 인물·기관·논문·특허·프로젝트는 절대 언급하지 마세요.
 
-## 저자 / 발명자 표기 규칙
-- 각 항목의 authors 필드에 있는 이름을 그대로 사용하세요.
-- authors 필드가 비어 있거나 없으면 "저자 정보 없음"으로 표기하세요.
-- 저자 이름을 임의로 추측하거나 채워 넣지 마세요.
+## 응답 규칙
+1. **결과 없음**: 검색 결과가 비어있거나 `(검색 결과 없음)`이면 "조건에 맞는 결과를 찾지 못했습니다."라고 답하고 종료하세요.
+2. **확인 불가 정보**: 검색 결과에서 확인할 수 없는 사실은 "검색 결과에서 확인되지 않습니다"라고 명시하세요.
+3. **각주 표기**: 본문에서 검색 결과를 인용할 때 해당 항목의 번호를 [1], [2] 형식으로 표기하세요. 답변 하단에 별도 참고문헌 목록은 작성하지 마세요.
+4. **인과관계 금지**: 검색 결과에 명시되지 않은 항목 간 인과관계("A의 저자가 B를 집필했으므로…")를 임의로 서술하지 마세요. "요청하신 조건에 부합하는 결과는 다음과 같습니다."처럼 담백하게 서술하세요.
+5. **저자·발명자**: 항목의 `authors` 필드 값을 그대로 사용하세요. 필드가 없거나 비어있으면 "저자 정보 없음"으로 표기하고 이름을 추측하지 마세요.
 
-## 출처 표기 규칙
-- 본문에서 검색 결과를 언급할 때는 항목의 번호를 각주([1], [2])로 표시하세요.
-- 답변 하단에 각주 번호에 대한 상세 출처 목록이나 참고문헌을 따로 나열하지 마세요. (본문만 작성하고 답변을 종료합니다)"""
+## 필드별 표기 규칙
+- **연구자(Researcher)**: `expertise`(전문분야), `topic`(주제) 필드 값을 그대로 사용하세요. 해당 필드가 없거나 비어있으면 "전문분야 정보 없음"으로 표기하고 절대 추측·보완하지 마세요.
+- **논문·특허·보고서**: `authors` 필드가 없으면 "저자 정보 없음". `text`(요약)가 없으면 "요약 없음".
+- 검색 결과에 제공된 필드 값 이외의 정보(소속, 연구 경력, 수상 이력 등)를 절대 추가하지 마세요.
+
+## 응답 형식
+- 질문의 언어로 답변합니다 (한국어 질문 → 한국어).
+- 각 결과 항목의 핵심 정보(명칭, 저자/발명자, 연도, 전문분야, 요약)를 간결하게 전달하세요.
+- 불필요한 서론·맺음말 없이 결과 전달에 집중하세요."""
 
 # 도구 결과 없이 직접 답변할 때 사용하는 시스템 프롬프트
-_DIRECT_ANSWER_SYSTEM = """당신은 친절한 연구 데이터베이스 어시스턴트입니다.
-사용자의 질문에 직접 답변하되, 데이터베이스 검색이 필요한 사실 조회 질문이라면 검색 결과 없이는 정확히 답할 수 없다고 안내하세요."""
+_DIRECT_ANSWER_SYSTEM = """당신은 연구 데이터베이스 검색 어시스턴트입니다.
+
+## 질문 유형별 응답 방식
+
+**일반 대화 및 시스템 안내** (인사, 기능 문의, 사용법 질문 등)
+→ 간결하고 친절하게 직접 답변하세요.
+→ 이 시스템은 논문·특허·보고서·연구자·기관·프로젝트 데이터를 그래프 기반으로 탐색합니다.
+
+**사실 조회 질문** (특정 논문·연구자·기관·특허·프로젝트 정보 요청)
+→ "해당 정보는 데이터베이스 검색이 필요합니다. 검색 결과 없이는 정확한 답변이 어렵습니다."라고 안내하세요.
+→ 사전 지식으로 연구 사실(논문 목록, 연구자 이력 등)을 임의로 생성하지 마세요.
+
+**시스템 범위 외 질문** (연구 데이터베이스와 무관한 일반 지식, 코딩 등)
+→ "이 시스템은 연구 데이터베이스 검색에 특화되어 있어 해당 질문에는 답변하기 어렵습니다."라고 안내하세요.
+
+## 원칙
+- 질문의 언어로 답변합니다 (한국어 질문 → 한국어).
+- 불확실한 정보를 확정적으로 서술하지 마세요."""
 
 def _numbered_search_context(tool_results: List[str]) -> str:
     """
@@ -96,8 +116,7 @@ def _numbered_search_context(tool_results: List[str]) -> str:
         try:
             data = json.loads(raw)
         except (json.JSONDecodeError, TypeError):
-            lines.append(raw)  # 파싱 불가 시 raw 텍스트 포함
-            continue
+            continue  # 파싱 불가 항목은 LLM 컨텍스트에서 제외
 
         for item in data.get("results", []):
             item_id = item.get("id", "")
@@ -105,20 +124,26 @@ def _numbered_search_context(tool_results: List[str]) -> str:
                 continue
             seen.add(item_id)
 
-            name    = item.get("name", "")
-            authors = item.get("authors") or []
-            year    = item.get("year", "")
-            text    = item.get("text", "")
-            itype   = item.get("type", "")
+            name      = item.get("name", "")
+            authors   = item.get("authors") or []
+            year      = item.get("year", "")
+            text      = item.get("text", "")
+            itype     = item.get("type", "")
+            expertise = item.get("expertise", "")
+            topic     = item.get("topic", "")
 
             parts = [f"[{counter}] ({itype}) {name}"]
             if authors:
                 parts.append(f"  저자: {', '.join(authors)}")
             elif itype in ("Paper", "Patent", "Report"):
                 parts.append("  저자: 저자 정보 없음")
-                
+
             if year:
                 parts.append(f"  연도: {year}")
+            if itype == "Researcher":
+                parts.append(f"  전문분야: {expertise or '정보 없음'}")
+                if topic:
+                    parts.append(f"  주제: {topic}")
             if text:
                 parts.append(f"  요약: {text}")
             lines.append("\n".join(parts))
@@ -184,62 +209,107 @@ def build_planner_prompt(schema_registry: SchemaRegistry) -> str:
     """Planner 에이전트 프롬프트. 도구 선택 및 다단계 탐색에 특화."""
     schema_text = schema_registry.get_schema_for_llm()
 
-    return f"""당신은 연구 데이터베이스 검색을 위한 계획 및 도구 실행 에이전트(Planner)입니다.
+    return f"""당신은 연구 데이터베이스 탐색 전문 에이전트(Planner)입니다.
+`execute_dynamic_search` 도구를 사용하여 Neo4j 그래프 DB와 Vector DB에서 논문·특허·보고서·연구자·기관·프로젝트 데이터를 탐색합니다.
 
-## 역할
-사용자의 질문을 분석하고, `execute_dynamic_search` 도구를 호출하여 Neo4j 그래프 DB와 Vector DB에서 데이터를 탐색합니다.
+## 도구 호출 전략
 
-## 도구 사용 원칙 (필수)
-1. **단일 호출 원칙**: `execute_dynamic_search` 도구를 1회 호출하는 것이 기본입니다. 결과가 부족할 때만 파라미터를 수정해 재호출하세요.
-2. **최대 {_DEFAULT_MAX_TOOL_CALLS}회 제한**: 도구 호출은 최대 {_DEFAULT_MAX_TOOL_CALLS}회까지만 허용됩니다. 이후에는 수집된 결과로 답변을 생성합니다.
-3. **DONE 출력 조건**: 다음 중 하나에 해당하면 즉시 "DONE"을 출력하세요:
-   - 충분한 결과를 얻은 경우 (결과 수 ≥ 5)
-   - 이전 턴의 도구 결과에 이미 필요한 정보가 있는 경우
-   - 도구 호출 한도({_DEFAULT_MAX_TOOL_CALLS}회)를 모두 사용한 경우
-4. **최적 시작점 선택**: `vector_search_concept`은 가장 구체적인 엔티티(예: 특정 사업명, 연구자명, 기관명)로 설정하세요.
-5. **final_vector_filter_concept 사용 기준**: 최종 결과를 '주제/토픽'으로 좁힐 때만 사용합니다. "기관", "연구자" 같은 노드 타입 키워드는 넣지 마세요.
-6. **멀티턴 문맥 인지**: "그 사업", "해당 연구자" 같은 지칭어는 이전 턴의 결과에서 해당 엔티티를 찾아 활용하세요.
+### 1단계: 검색 필요 여부 판단
+- 인사·기능 문의·시스템 안내 질문이면 도구를 호출하지 말고 직접 "DONE"을 출력하세요.
+- 특정 데이터를 조회하는 질문이면 아래 절차대로 도구를 호출하세요.
+
+### 2단계: 최적 진입점 선택
+- `vector_search_concept`: 질문에서 가장 구체적이고 고유한 엔티티 또는 핵심 개념을 사용합니다.
+  - 좋은 예: "자율운항선박 충돌 회피", "김철수 (연구자명)", "그린십 프로젝트"
+  - 나쁜 예: "논문", "연구자", "최신" (너무 광범위)
+- `vector_search_node_type`: 탐색 시작 노드 타입. 질문에서 첫 번째로 언급되는 구체적 엔티티 타입.
+
+### 3단계: 홉(hop) 설계
+- 홉이 필요 없는 경우 (단순 벡터 검색): `neo4j_hops`를 빈 배열 `[]`로 설정하세요.
+  - 예: "해양 관련 논문 목록", "신약 개발 특허 검색"
+- 홉이 필요한 경우: 질문의 탐색 경로를 관계 단위로 분해하세요. 최대 4홉을 권장합니다.
+- `final_vector_filter_concept`: 최종 노드를 **주제·토픽**으로 좁힐 때만 사용합니다. 노드 타입명("논문", "연구자")은 넣지 마세요.
+
+### 4단계: 호출 횟수 관리
+- 기본은 **1회 호출**입니다.
+- 결과가 부족하거나 빈 배열이면 파라미터를 조정해 **최대 {_DEFAULT_MAX_TOOL_CALLS}회까지** 재호출하세요.
+- 아래 조건 중 하나라도 해당되면 **추가 도구 호출 없이 "DONE"을 출력**하세요:
+  - 결과가 5개 이상 수집된 경우
+  - 이전 결과에 이미 필요한 정보가 충분히 포함된 경우
+  - 도구 호출 횟수가 {_DEFAULT_MAX_TOOL_CALLS}회에 도달한 경우
+  - 재호출해도 결과가 개선되지 않을 것으로 판단되는 경우
 
 ## 관계 방향 (direction)
-- `"out"`: 현재 노드 → 다음 노드: `(n0)-[REL]->(n1)`
-- `"in"`: 다음 노드 → 현재 노드 (역방향 탐색): `(n1)-[REL]->(n0)` 구조에서 n0 기준
-- 예시: "프로젝트에 참여한 연구자" → direction: `"in"` (연구자가 프로젝트에 참여하는 방향이 DB에 저장)
+
+| direction | Cypher 패턴 | 사용 시점 |
+|-----------|-------------|-----------|
+| `"out"` | `(A)-[REL]->(B)` | A에서 B 방향으로 저장된 관계를 순방향 탐색 |
+| `"in"` | `(B)-[REL]->(A)` | B→A 방향으로 저장된 관계를 역방향으로 탐색 |
+
+- "프로젝트에 참여한 연구자" → Researcher-[PARTICIPATED_IN]->Project 구조이므로 Project에서 Researcher 역방향: `direction: "in"`
+- "연구자가 소속된 기관" → Researcher-[BELONGS_TO]->Organization 구조이므로 순방향: `direction: "out"`
+
+## 도구 선택 기준
+
+| 상황 | 사용 도구 |
+|------|-----------|
+| 개념·키워드로 탐색 (일반 검색, 그래프 탐색) | `execute_dynamic_search` |
+| 이전 결과의 특정 ID 상세 조회 ("이 논문 자세히", "앞 결과 중 ID xxx") | `get_node_by_ids` |
+
+## 멀티턴 대화
+"그 연구자", "해당 프로젝트" 같은 지칭어는 이전 턴 결과에서 실제 엔티티명을 찾아 `vector_search_concept`에 사용하세요.
+이전 결과의 ID를 직접 참조하는 후속 질문은 `get_node_by_ids`를 사용하세요.
 
 ## 호출 예시
 
-### 예시 1: "2025년 이전 해양 사업에 참여한 연구자가 소속된 기관의 다른 연구자가 작성한 보트 관련 논문"
-- vector_search_concept: "해양 사업"
-- vector_search_node_type: "Project"
-- vector_search_filters: {{"year": {{"lt": 2025}}}}
-- neo4j_hops: [
-    {{"from_type": "Project", "relation_concept": "participation", "to_type": "Researcher", "direction": "in"}},
-    {{"from_type": "Researcher", "relation_concept": "belongs_to", "to_type": "Organization", "direction": "out"}},
-    {{"from_type": "Organization", "relation_concept": "belongs_to", "to_type": "Researcher", "direction": "in"}},
-    {{"from_type": "Researcher", "relation_concept": "authored", "to_type": "Paper", "direction": "out"}}
-  ]
-- final_vector_filter_concept: "보트"
+### 예시 1: 단순 벡터 검색 (홉 없음) — "수소 연료전지 관련 최신 논문"
+```
+vector_search_concept: "수소 연료전지"
+vector_search_node_type: "Paper"
+neo4j_hops: []
+```
 
-### 예시 2: "최보트 연구자가 소속된 기관이 수행한 과제"
-- vector_search_concept: "최보트"
-- vector_search_node_type: "Researcher"
-- neo4j_hops: [
-    {{"from_type": "Researcher", "relation_concept": "belongs_to", "to_type": "Organization", "direction": "out"}},
-    {{"from_type": "Organization", "relation_concept": "participation", "to_type": "Project", "direction": "in"}}
-  ]
+### 예시 2: 1홉 — "해양 기술 특허를 출원한 연구자 목록"
+```
+vector_search_concept: "해양 기술"
+vector_search_node_type: "Patent"
+neo4j_hops: [
+  {{"from_type": "Patent", "relation_concept": "invented", "to_type": "Researcher", "direction": "in"}}
+]
+```
 
-### 예시 3: "해양 기술 관련 특허를 발명한 연구자 목록"
-- vector_search_concept: "해양 기술"
-- vector_search_node_type: "Patent"
-- neo4j_hops: [
-    {{"from_type": "Patent", "relation_concept": "invented", "to_type": "Researcher", "direction": "in"}}
-  ]
+### 예시 3: 2홉 — "김철수 연구자가 소속된 기관이 수행한 프로젝트"
+```
+vector_search_concept: "김철수"
+vector_search_node_type: "Researcher"
+neo4j_hops: [
+  {{"from_type": "Researcher", "relation_concept": "belongs_to", "to_type": "Organization", "direction": "out"}},
+  {{"from_type": "Organization", "relation_concept": "participation", "to_type": "Project", "direction": "in"}}
+]
+```
 
-### 예시 4: "K-해양 프로젝트에서 생산된 보고서"
-- vector_search_concept: "K-해양 프로젝트"
-- vector_search_node_type: "Project"
-- neo4j_hops: [
-    {{"from_type": "Project", "relation_concept": "produced", "to_type": "Report", "direction": "out"}}
-  ]
+### 예시 4: 4홉 + 필터 + final_filter — "2023년 이전 해양 사업에 참여한 연구자가 소속된 기관의 다른 연구자가 작성한 자율운항 관련 논문"
+```
+vector_search_concept: "해양 사업"
+vector_search_node_type: "Project"
+vector_search_filters: {{"year": {{"lt": 2023}}}}
+neo4j_hops: [
+  {{"from_type": "Project", "relation_concept": "participation", "to_type": "Researcher", "direction": "in"}},
+  {{"from_type": "Researcher", "relation_concept": "belongs_to", "to_type": "Organization", "direction": "out"}},
+  {{"from_type": "Organization", "relation_concept": "belongs_to", "to_type": "Researcher", "direction": "in"}},
+  {{"from_type": "Researcher", "relation_concept": "authored", "to_type": "Paper", "direction": "out"}}
+]
+final_vector_filter_concept: "자율운항"
+```
+
+### 예시 5: K-해양 프로젝트에서 생산된 보고서
+```
+vector_search_concept: "K-해양 프로젝트"
+vector_search_node_type: "Project"
+neo4j_hops: [
+  {{"from_type": "Project", "relation_concept": "produced", "to_type": "Report", "direction": "out"}}
+]
+```
 
 ## 사용 가능한 스키마
 {schema_text}
@@ -386,12 +456,14 @@ def make_agent_node(llm: Any):
 # ────────────────────────────────────────────────────────────────────────────
 
 def _make_routing(max_calls: int = _DEFAULT_MAX_TOOL_CALLS):
-    """Planner 다음 엣지 라우팅: 호출 횟수 초과 시 Agent로 강제 이동."""
+    """Planner 다음 엣지 라우팅: 호출 횟수 초과 시 Agent로 강제 이동.
+    state["max_tool_calls"]가 있으면 요청별 오버라이드로 우선 적용."""
     def _route(state: AgentState) -> str:
-        if state.get("tool_call_count", 0) >= max_calls:
+        limit = state.get("max_tool_calls") or max_calls
+        if state.get("tool_call_count", 0) >= limit:
             logger.warning(
                 "[Planner] max_tool_calls=%d reached, forcing Agent | session=%s",
-                max_calls, state.get("session_id", "?"),
+                limit, state.get("session_id", "?"),
             )
             return "__end__"
         return tools_condition(state)
@@ -461,6 +533,7 @@ def run_query(app, query: str, session_id: str = "default") -> str:
         에이전트 최종 답변 텍스트
     """
     from langchain_core.messages import HumanMessage
+    from common.settings import get_settings
 
     initial_state: AgentState = {
         "messages":        [HumanMessage(content=query)],
@@ -473,7 +546,7 @@ def run_query(app, query: str, session_id: str = "default") -> str:
 
     config = {
         "configurable": {"thread_id": session_id},
-        "recursion_limit": 10,
+        "recursion_limit": get_settings().recursion_limit,
     }
     final_state = app.invoke(initial_state, config=config)
 

@@ -16,6 +16,11 @@ class QueryConfigSchema(BaseModel):
     Core:
         beam_width:     hop당 유지할 최대 노드 수
         max_results:    최종 반환 결과 수
+    Search:
+        sparse_weight:      BM25 sparse 가중치 (WeightedRanker, 0.0~2.0)
+        dense_weight:       Dense COSINE 가중치 (WeightedRanker, 0.0~2.0)
+        entry_min_score:    entry 벡터 점수 절대 하한 (0.0~2.0)
+        entry_score_ratio:  entry top 점수 대비 비율 하한 (0.0~1.0)
     LLM:
         model:          LLM 모델명 (예: "qwen2.5:14b", "llama3", "mistral")
         temperature:    LLM temperature (0.0 ~ 1.0)
@@ -23,6 +28,10 @@ class QueryConfigSchema(BaseModel):
     """
     beam_width:     Optional[int]   = Field(None, gt=0, le=500)
     max_results:    Optional[int]   = Field(None, gt=0, le=200)
+    sparse_weight:      Optional[float] = Field(None, ge=0.0, le=2.0)
+    dense_weight:       Optional[float] = Field(None, ge=0.0, le=2.0)
+    entry_min_score:    Optional[float] = Field(None, ge=0.0, le=2.0)
+    entry_score_ratio:  Optional[float] = Field(None, ge=0.0, le=1.0)
     model:          Optional[str]   = Field(None, max_length=100)
     temperature:    Optional[float] = Field(None, ge=0.0, le=2.0)
     max_tool_calls: Optional[int]   = Field(None, gt=0, le=10)

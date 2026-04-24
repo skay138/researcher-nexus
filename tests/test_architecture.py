@@ -10,7 +10,7 @@ import pytest
 
 from common.fixtures import SEED_NODES as MOCK_NODES, SEED_RELATIONS as MOCK_RELATIONS
 from infrastructure.in_memory import make_in_memory_adapters as _make_adapters
-mock_vector_search, mock_graph_query, mock_fetch_details, mock_fetch_texts = _make_adapters(MOCK_NODES, MOCK_RELATIONS)
+mock_vector_search, mock_graph_query, mock_fetch_details = _make_adapters(MOCK_NODES, MOCK_RELATIONS)
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ def compiler(schema_registry):
 @pytest.fixture
 def pruner():
     from core.executor.beam_pruner import BeamPruner
-    return BeamPruner(vectorizer=None, beam_width=3)
+    return BeamPruner(beam_width=3)
 
 
 @pytest.fixture
@@ -44,7 +44,6 @@ def engine(compiler, pruner):
         vector_search_fn=mock_vector_search,
         graph_query_fn=mock_graph_query,
         fetch_details_fn=mock_fetch_details,
-        fetch_texts_fn=mock_fetch_texts,
     )
 
 
@@ -189,7 +188,6 @@ class TestSemanticTools:
             vector_search_fn=mock_vector_search,
             graph_query_fn=mock_graph_query,
             fetch_details_fn=mock_fetch_details,
-            fetch_texts_fn=mock_fetch_texts,
         ))
 
     def test_basic_search_returns_string(self):
@@ -248,7 +246,6 @@ class TestIntegration:
             vector_search_fn=mock_vector_search,
             graph_query_fn=mock_graph_query,
             fetch_details_fn=mock_fetch_details,
-            fetch_texts_fn=mock_fetch_texts,
         )
         set_engine(self.engine)
 
@@ -346,7 +343,6 @@ class TestPatentReportDomain:
             vector_search_fn=mock_vector_search,
             graph_query_fn=mock_graph_query,
             fetch_details_fn=mock_fetch_details,
-            fetch_texts_fn=mock_fetch_texts,
         ))
         result = execute_dynamic_search.func(
             vector_search_concept="해양 에너지",

@@ -2,7 +2,7 @@
 In-Memory DB Adapter (replaces adapters/mock.py)
 - 실제 Neo4j / Milvus 없이 전체 파이프라인 동작 가능
 - 데이터는 외부(shared/fixtures.py 등)에서 주입 — 하드코딩 없음
-- make_in_memory_adapters(nodes, relations) → (vector_fn, graph_fn, details_fn, texts_fn)
+- make_in_memory_adapters(nodes, relations) → (vector_fn, graph_fn, details_fn)
 """
 
 from __future__ import annotations
@@ -18,16 +18,15 @@ def make_in_memory_adapters(
     keyword_threshold: float = 1.0,
 ) -> Tuple:
     """
-    인메모리 어댑터 4종을 생성하여 튜플로 반환.
+    인메모리 어댑터 3종을 생성하여 튜플로 반환.
 
     Returns:
-        (vector_search_fn, graph_query_fn, fetch_details_fn, fetch_texts_fn)
+        (vector_search_fn, graph_query_fn, fetch_details_fn)
     """
-    vector_fn   = _make_vector_search(nodes, keyword_threshold)
-    graph_fn    = _make_graph_query(nodes, relations)
-    details_fn  = _make_fetch_details(nodes, relations)
-    texts_fn    = _make_fetch_texts(nodes)
-    return vector_fn, graph_fn, details_fn, texts_fn
+    vector_fn  = _make_vector_search(nodes, keyword_threshold)
+    graph_fn   = _make_graph_query(nodes, relations)
+    details_fn = _make_fetch_details(nodes, relations)
+    return vector_fn, graph_fn, details_fn
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -40,12 +39,11 @@ def _make_vector_search(nodes: Dict[str, Dict], keyword_threshold: float):
         node_type: str,
         filters: Dict[str, Any],
         top_k: int = 20,
-        score_threshold: float = None,  # 키워드 매칭에는 미적용
-    ) -> List[str]:
+    ) -> List[Tuple[str, float]]:
         concept_lower = concept.lower()
         keywords = [kw for kw in concept_lower.split() if kw]
 
-        scored: List[tuple] = []
+        scored: List[Tuple[float, str]] = []
         for nid, node in nodes.items():
             if node_type and node["type"] != node_type:
                 continue
@@ -75,7 +73,7 @@ def _make_vector_search(nodes: Dict[str, Dict], keyword_threshold: float):
                 scored.append((score, nid))
 
         scored.sort(key=lambda x: -x[0])
-        return [nid for _, nid in scored[:top_k]]
+        return [(nid, score) for score, nid in scored[:top_k]]
 
     return vector_search
 
@@ -174,18 +172,3 @@ def _make_fetch_details(nodes: Dict[str, Dict], relations: Dict[str, List[Dict]]
     return fetch_details
 
 
-def _make_fetch_texts(nodes: Dict[str, Dict]):
-    _EXTRA = {"topic", "expertise", "keywords", "patent_number",
-              "report_type", "filing_date", "inventors"}
-
-    def fetch_texts(ids: List[str]) -> List[str]:
-        texts = []
-        for nid in ids:
-            node = nodes.get(nid, {})
-            text = (node.get("text") or node.get("abstract")
-                    or node.get("summary") or node.get("name", "") or nid)
-            extra = " ".join(str(v) for k, v in node.items() if k in _EXTRA and v)
-            texts.append(f"{text} {extra}".strip())
-        return texts
-
-    return fetch_texts

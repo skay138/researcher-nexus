@@ -159,6 +159,9 @@
       font-weight: 700;
       margin-bottom: 0.5rem;
       color: #6366f1;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
     .source-item {
       margin-bottom: 0.4rem;
@@ -319,8 +322,20 @@
           <input type="number" id="conf-results" value="20" min="1">
         </div>
         <div class="setting-group">
-          <label>Threshold</label>
-          <input type="number" id="conf-threshold" value="0.6" step="0.1" min="0" max="1">
+          <label>Sparse Weight (BM25)</label>
+          <input type="number" id="conf-sparse" value="0.3" step="0.1" min="0" max="2">
+        </div>
+        <div class="setting-group">
+          <label>Dense Weight (COSINE)</label>
+          <input type="number" id="conf-dense" value="1.0" step="0.1" min="0" max="2">
+        </div>
+        <div class="setting-group">
+          <label>Entry Min Score</label>
+          <input type="number" id="conf-min-score" value="0.2" step="0.05" min="0" max="2">
+        </div>
+        <div class="setting-group">
+          <label>Entry Score Ratio</label>
+          <input type="number" id="conf-score-ratio" value="0.5" step="0.05" min="0" max="1">
         </div>
       </div>
     </div>
@@ -445,9 +460,12 @@
       const { body: answerBody, chips, sourcesBox } = createAssistantMessage();
 
       const config = {
-        beam_width: parseInt(document.getElementById("conf-beam").value),
-        max_results: parseInt(document.getElementById("conf-results").value),
-        vector_score_threshold: parseFloat(document.getElementById("conf-threshold").value)
+        beam_width:        parseInt(document.getElementById("conf-beam").value)    || undefined,
+        max_results:       parseInt(document.getElementById("conf-results").value) || undefined,
+        sparse_weight:     parseFloat(document.getElementById("conf-sparse").value),
+        dense_weight:      parseFloat(document.getElementById("conf-dense").value),
+        entry_min_score:   parseFloat(document.getElementById("conf-min-score").value),
+        entry_score_ratio: parseFloat(document.getElementById("conf-score-ratio").value),
       };
 
       try {
@@ -478,12 +496,19 @@
                 if (payload.sources && payload.sources.length > 0) {
                   sourcesBox.style.display = "block";
                   let html = `<div class="sources-title">[출처]</div>`;
+                  
                   payload.sources.forEach(s => {
                     const authorsStr = (s.authors && s.authors.length > 0) ? s.authors.join(", ") : "저자/참여자 정보 없음";
                     const yearStr = s.year ? ` (${s.year})` : "";
                     const typeStr = s.type || "Unknown";
+                    const score = (typeof s.score === 'number') ? s.score.toFixed(3) : null;
+                    const scoreHtml = score !== null
+                      ? `<span style="color: #a5b4fc; font-size: 0.72rem; margin-left: 6px;">(${score})</span>`
+                      : "";
+
                     html += `<div class="source-item">
-                               <div>[${s.no}] (${typeStr}) ${escHtml(s.name)}${escHtml(yearStr)} — ${escHtml(authorsStr)}</div>`;
+                               <div>[${s.no}] (${typeStr}) <b>${escHtml(s.name)}</b>${escHtml(yearStr)}${scoreHtml}</div>
+                               <div style="font-size: 0.75rem; color: #718096; margin-top: 1px;">— ${escHtml(authorsStr)}</div>`;
                     if (s.path) {
                       html += `<div class="source-path">└ 탐색 경로: ${escHtml(s.path)}</div>`;
                     }

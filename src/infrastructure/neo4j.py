@@ -1,13 +1,12 @@
 """
 Neo4j Graph Database Adapter
 사용법:
-    from adapters.neo4j import make_graph_query_fn, make_fetch_details_fn, make_fetch_texts_fn
+    from infrastructure.neo4j import make_graph_query_fn, make_fetch_details_fn
     from neo4j import GraphDatabase
 
     driver = GraphDatabase.driver(uri, auth=(user, password))
     graph_fn   = make_graph_query_fn(driver)
     details_fn = make_fetch_details_fn(driver)
-    texts_fn   = make_fetch_texts_fn(driver)
 """
 
 from __future__ import annotations
@@ -89,24 +88,3 @@ def make_fetch_details_fn(driver):
     return fetch_details
 
 
-def make_fetch_texts_fn(driver):
-    """
-    BeamPruner용 텍스트 추출 콜백.
-    인터페이스: (ids: List[str]) → List[str]
-    """
-    def fetch_texts(ids: List[str]) -> List[str]:
-        if not ids:
-            return []
-        t0 = time.perf_counter()
-        with driver.session() as session:
-            result = session.run(
-                "MATCH (n) WHERE n.id IN $ids "
-                "RETURN n.id AS id, "
-                "coalesce(n.text, n.abstract, n.summary, n.name, n.id) AS text",
-                ids=ids,
-            )
-            id_to_text = {r["id"]: (r["text"] or "") for r in result}
-        logger.debug("[Neo4j] fetch_texts: %d nodes  %.1f ms", len(id_to_text), (time.perf_counter() - t0) * 1000)
-        return [id_to_text.get(nid, nid) for nid in ids]
-
-    return fetch_texts

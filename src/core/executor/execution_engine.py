@@ -1,7 +1,7 @@
 """
 Execution Engine
 - QueryPlan을 hop-by-hop으로 실행
-- 각 hop 후 BeamPruner로 결과 압축
+- hop 결과는 entry 벡터 점수를 start_id 경유로 전파하여 정렬·절단 (BeamPruner 미사용)
 - Redis 캐싱으로 중복 쿼리 방지
 - 실행 통계 수집 (Observability)
 """
@@ -14,7 +14,7 @@ import logging
 import time
 
 from common.query_plan import EntrySearch, FinalFilter, HopSpec, QueryPlan
-from common.config_service import QueryConfig
+from common.query_config import QueryConfig
 from core.compiler.cypher_compiler import CypherCompiler
 from core.executor.beam_pruner import BeamPruner
 from common.cache import CacheBackend, make_cache_key
@@ -97,10 +97,9 @@ class ExecutionEngine:
     QueryPlan 실행기.
 
     외부 DB는 콜백(callable)으로 주입받아 테스트 용이성 확보:
-      - vector_search_fn:   (query, node_type, filters, top_k) → List[str]  (IDs)
-      - graph_query_fn:     (cypher_query) → List[dict]
+      - vector_search_fn:   (query, node_type, filters, top_k) → List[tuple[str, float]]
+      - graph_query_fn:     (cypher_query) → List[dict]  (각 dict에 id, start_id, name 포함)
       - fetch_details_fn:   (ids) → List[NodeResult]
-      - fetch_texts_fn:     (ids) → List[str]  (for BeamPruner)
     """
 
     def __init__(
@@ -110,7 +109,6 @@ class ExecutionEngine:
         vector_search_fn: Callable,
         graph_query_fn:   Callable,
         fetch_details_fn: Callable,
-        fetch_texts_fn:   Callable,
         cache:            Optional[CacheBackend] = None,
     ):
         self.compiler         = compiler
@@ -118,7 +116,6 @@ class ExecutionEngine:
         self.vector_search_fn = vector_search_fn
         self.graph_query_fn   = graph_query_fn
         self.fetch_details_fn = fetch_details_fn
-        self.fetch_texts_fn   = fetch_texts_fn
         self._cache: CacheBackend = cache if cache is not None else _NullCache()  # type: ignore[assignment]
 
     # ------------------------------------------------------------------ #
@@ -142,9 +139,10 @@ class ExecutionEngine:
         Returns:
             (결과 노드 목록, 실행 통계)
         """
-        beam_width             = config.beam_width             if config and config.beam_width             is not None else None
-        max_results            = config.max_results            if config and config.max_results            is not None else plan.max_results
-        vector_score_threshold = config.vector_score_threshold if config and config.vector_score_threshold is not None else None
+        beam_width        = config.beam_width        if config and config.beam_width        is not None else None
+        max_results       = config.max_results       if config and config.max_results       is not None else plan.max_results
+        entry_min_score   = config.entry_min_score   if config and config.entry_min_score   is not None else None
+        entry_score_ratio = config.entry_score_ratio if config and config.entry_score_ratio is not None else None
 
         stats = ExecutionStats()
         t_start = time.time()
@@ -152,10 +150,16 @@ class ExecutionEngine:
         logger.info("ExecutionEngine.run()\n%s", plan.describe())
 
         # Step 1 & 2: Vector DB 진입 및 그래프 탐색
-        # 개별 노드별 도달 경로(Provenance) 추적용 맵
+        # 개별 노드별 도달 경로(Provenance) 및 점수 추적용 맵
         provenance: Dict[str, str] = {}
-        entry_ids = self._run_entry_search(plan.entry_search, stats, provenance,
-                                           score_threshold=vector_score_threshold)
+        scores_map: Dict[str, float] = {}
+        
+        entry_ids, entry_scores = self._run_entry_search(
+            plan.entry_search, stats, provenance,
+            min_score=entry_min_score,
+            score_ratio=entry_score_ratio,
+        )
+        scores_map.update(entry_scores)
 
         if not entry_ids:
             logger.warning("Entry search returned no results.")
@@ -168,13 +172,14 @@ class ExecutionEngine:
         query_context = original_query or plan.entry_search.concept
 
         for hop_idx, hop in enumerate(plan.traversal_hops):
-            current_ids = self._run_single_hop(
-                hop, current_ids, hop_idx, query_context, max_results, stats,
+            current_ids, hop_scores = self._run_single_hop(
+                hop, current_ids, hop_idx, query_context, stats,
+                parent_scores=scores_map,
                 exclude_ids=list(traversal_history_ids),
                 provenance=provenance,
                 beam_width=beam_width,
-                score_threshold=vector_score_threshold,
             )
+            scores_map.update(hop_scores)
             if not current_ids:
                 logger.warning("Hop %d returned no results, stopping.", hop_idx)
                 break
@@ -182,17 +187,19 @@ class ExecutionEngine:
 
         # Step 3: 최종 필터 (있을 경우 Vector 재검색으로 의미 필터)
         if plan.final_filter and current_ids:
-            current_ids = self._run_final_filter(
+            current_ids, filter_scores = self._run_final_filter(
                 plan.final_filter, current_ids, stats,
-                score_threshold=vector_score_threshold,
             )
+            scores_map.update(filter_scores)
 
-        # Step 4: 상세 정보 로드
-        results = self._fetch_details(current_ids[:max_results], stats)
-        
-        # 각 결과물에 추적된 개별 경로 주입
+        # Step 4: 점수 내림차순 정렬 후 상세 정보 로드
+        sorted_ids = sorted(current_ids, key=lambda nid: scores_map.get(nid, 0.0), reverse=True)
+        results = self._fetch_details(sorted_ids[:max_results], stats)
+
+        # 각 결과물에 추적된 개별 경로 및 점수 주입
         for r in results:
             r.path = provenance.get(r.id, stats.path_summary)
+            r.meta["score"] = round(scores_map.get(r.id, 0.0), 3)
 
         stats.total_elapsed_s = time.time() - t_start
         logger.info(
@@ -209,8 +216,9 @@ class ExecutionEngine:
 
     def _run_entry_search(
         self, entry: EntrySearch, stats: ExecutionStats, provenance: Dict[str, str],
-        score_threshold: Optional[float] = None,
-    ) -> List[str]:
+        min_score: Optional[float] = None,
+        score_ratio: Optional[float] = None,
+    ) -> tuple[List[str], Dict[str, float]]:
         cache_key = make_cache_key("entry", entry.model_dump())
 
         def _clean(s): return " ".join(str(s).split()) if s else ""
@@ -219,23 +227,35 @@ class ExecutionEngine:
             stats.cache_hits += 1
             stats.hop_counts.append(len(cached))
             path_seg = f"시작({entry.node_type}: '{entry.concept}')"
-
-            sample_nodes = self.fetch_details_fn(cached)
-            if sample_nodes:
-                path_seg += f"['{_clean(sample_nodes[0].name or sample_nodes[0].id)}']"
-            for sn in sample_nodes:
-                provenance[sn.id] = f"시작({sn.type}: '{entry.concept}')['{_clean(sn.name or sn.id)}']"
-
+            # 캐시 히트 시 추가 DB 호출 없이 generic provenance 사용
+            for rid in cached:
+                provenance[rid] = path_seg
             stats.path_summary = path_seg
             logger.info("[Engine] Entry '%s' (%s): %d건 (cache hit)", entry.concept, entry.node_type, len(cached))
-            return cached
+            return cached, {rid: 1.0 for rid in cached}
 
         with _timed(stats, "L4 | Milvus  vector_search",
                     concept=entry.concept, node_type=entry.node_type):
-            ids = self.vector_search_fn(
+            search_results = self.vector_search_fn(
                 entry.concept, entry.node_type, entry.filters, entry.top_k,
-                score_threshold=score_threshold,
             )
+        
+        # entry score 필터: max(min_score, top_score * ratio) 미만 제거
+        if search_results and (min_score is not None or score_ratio is not None):
+            top_score = max(score for _, score in search_results)
+            relative_cut = top_score * score_ratio if score_ratio is not None else 0.0
+            threshold = max(min_score or 0.0, relative_cut)
+            before_filter = len(search_results)
+            search_results = [(rid, s) for rid, s in search_results if s >= threshold]
+            logger.info(
+                "[Engine] Entry score filter: threshold=%.3f (min=%.3f, top=%.3f×%.2f) → %d/%d",
+                threshold, min_score or 0.0, top_score, score_ratio or 0.0,
+                len(search_results), before_filter,
+            )
+
+        ids = [rid for rid, score in search_results]
+        entry_scores = {rid: score for rid, score in search_results}
+
         stats.db_calls += 1
         stats.hop_counts.append(len(ids))
 
@@ -256,7 +276,7 @@ class ExecutionEngine:
 
         stats.path_summary = path_seg
         self._cache.set(cache_key, ids)
-        return ids
+        return ids, entry_scores
 
     def _run_single_hop(
         self,
@@ -264,13 +284,12 @@ class ExecutionEngine:
         start_ids:     List[str],
         hop_idx:       int,
         query_context: str,
-        max_results:   int,
         stats:         ExecutionStats,
+        parent_scores: Dict[str, float],
         exclude_ids:   Optional[List[str]] = None,
         provenance:    Optional[Dict[str, str]] = None,
         beam_width:    Optional[int] = None,
-        score_threshold: Optional[float] = None,
-    ) -> List[str]:
+    ) -> tuple[List[str], Dict[str, float]]:
         cache_key = make_cache_key(
             "hop", {"hop": hop.model_dump(), "ids": sorted(start_ids), "ctx": query_context, "ex": sorted(exclude_ids or [])}
         )
@@ -279,31 +298,48 @@ class ExecutionEngine:
             stats.hop_counts.append(len(cached))
             stats.path_summary += f" -[{hop.relation_concept}]-> {hop.to_type}"
             logger.info("[Engine] Hop %d (%s): %d건 (cache hit)", hop_idx + 1, hop.relation_concept, len(cached))
-            return cached
+            # 캐시된 ID 집합에 현재 parent_scores 재적용 (점수는 parent 기준)
+            return cached, {rid: parent_scores.get(rid, 1.0) for rid in cached}
+
+        bw = beam_width if beam_width is not None else self.pruner.beam_width
 
         # L2: Cypher 컴파일
         with _timed(stats, f"L2 | compile        hop {hop_idx + 1}"):
             cypher = self.compiler.compile_single_hop(
-                hop, start_ids, limit=self.pruner.beam_width * 3, exclude_ids=exclude_ids
+                hop, start_ids, limit=bw * 3, exclude_ids=exclude_ids
             )
         # L4: Neo4j 그래프 쿼리
         with _timed(stats, f"L4 | Neo4j   graph_query hop {hop_idx + 1}"):
             raw = self.graph_query_fn(cypher)
         stats.db_calls += 1
 
-        result_ids = [r["id"] for r in raw]
-        before = len(result_ids)
+        # L3: Pruning — entry 벡터 점수를 start_id 경유로 전파, 상위 bw개 유지
+        # 의미 유사도(코사인) 대신 부모 노드의 벡터 점수를 상속하므로
+        # "쿼리와 무관한 경유 노드(기관명 등)"도 올바르게 순위 매김
+        with _timed(stats, f"L3 | ScorePropagate hop {hop_idx + 1}", raw=len(raw)):
+            node_scores: Dict[str, float] = {}
+            for r_node in raw:
+                rid    = r_node["id"]
+                src_id = r_node.get("start_id")
+                p_score = parent_scores.get(src_id, 0.0) if src_id else 0.0
+                if rid not in node_scores or p_score > node_scores[rid]:
+                    node_scores[rid] = p_score
 
-        # L3: BeamPruner 의미적 압축 (내부에서 fetch_texts 호출 포함)
-        with _timed(stats, f"L3 | BeamPrune      hop {hop_idx + 1}", before=before):
-            result_ids = self.pruner.prune(result_ids, query_context, self.fetch_texts_fn,
-                                           beam_width=beam_width, score_threshold=score_threshold)
-        stats.pruned_total += max(0, before - len(result_ids))
+            sorted_pairs = sorted(node_scores.items(), key=lambda x: x[1], reverse=True)
+            pruned_pairs = sorted_pairs[:bw]
+
+        result_ids = [rid for rid, _ in pruned_pairs]
+        hop_scores = dict(pruned_pairs)
+
+        # 중복 제거(dedup)는 pruned_total에서 제외 — beam_width 초과분만 집계
+        unique_count = len(node_scores)
+        stats.pruned_total += max(0, unique_count - len(result_ids))
         stats.hop_counts.append(len(result_ids))
 
-        logger.info("[Engine] Hop %d (%s -> %s): %d건 (pruned %d)",
+        logger.info("[Engine] Hop %d (%s -> %s): raw=%d  dedup=%d  pruned=%d  kept=%d",
                     hop_idx + 1, hop.relation_concept, hop.to_type,
-                    len(result_ids), before - len(result_ids))
+                    len(raw), len(raw) - unique_count,
+                    unique_count - len(result_ids), len(result_ids))
 
         def _clean(s): return " ".join(str(s).split()) if s else ""
 
@@ -332,34 +368,36 @@ class ExecutionEngine:
 
         stats.path_summary += path_seg
         self._cache.set(cache_key, result_ids)
-        return result_ids
+        return result_ids, hop_scores
 
     def _run_final_filter(
         self,
         ffilter:     FinalFilter,
         current_ids: List[str],
         stats:       ExecutionStats,
-        score_threshold: Optional[float] = None,
-    ) -> List[str]:
+    ) -> tuple[List[str], Dict[str, float]]:
         if not ffilter.concept:
-            return current_ids
+            return current_ids, {}
 
         # 현재 ID 집합 안에서 의미 필터: Vector 재검색 + intersection
         with _timed(stats, "L4 | Milvus  final_filter", concept=ffilter.concept):
-            filtered = self.vector_search_fn(
+            filtered_results = self.vector_search_fn(
                 ffilter.concept,
                 ffilter.node_type or "",
                 {**ffilter.filters, "id_in": current_ids},
                 top_k=500,
-                score_threshold=score_threshold,
             )
         stats.db_calls += 1
-        result = [i for i in filtered if i in set(current_ids)]
+        
+        filtered_ids = [rid for rid, score in filtered_results]
+        filter_scores = {rid: score for rid, score in filtered_results}
+        
+        result = [i for i in filtered_ids if i in set(current_ids)]
         logger.info(
             "Final filter '%s': %d → %d nodes",
             ffilter.concept, len(current_ids), len(result),
         )
-        return result
+        return result, filter_scores
 
     def _fetch_details(
         self, ids: List[str], stats: ExecutionStats

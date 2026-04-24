@@ -39,7 +39,6 @@ class Settings(BaseSettings):
     sentence_transformer_model: str = "snunlp/KR-SBERT-V40K-klueNLI-augSTS"
 
     # ── Application ───────────────────────────────────────────────────────────
-    use_mock: bool = True
     log_level: str = "INFO"
     environment: Literal["development", "production"] = "development"
     api_host: str = "0.0.0.0"

@@ -36,22 +36,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     logger.info(
         "application_startup",
-        extra={"environment": settings.environment, "use_mock": settings.use_mock},
+        extra={"environment": settings.environment},
     )
 
-    from app_factory import create_engine, create_app as _create_app
+    from app_factory import create_engine, create_app as _create_app, _open_neo4j, _open_milvus
     from core.compiler.schema_registry import SchemaRegistry
 
-    # use_mock=False 시 드라이버를 먼저 생성해 SchemaRegistry와 공유
-    neo4j_driver = None
-    milvus_client = None
-    if not settings.use_mock:
-        from app_factory import _open_neo4j, _open_milvus
-        try:
-            neo4j_driver  = _open_neo4j(settings)
-            milvus_client = _open_milvus(settings)
-        except Exception as e:
-            logger.error("DB 연결 실패: %s — Mock 모드로 폴백합니다", e)
+    neo4j_driver = _open_neo4j(settings)
+    milvus_client = _open_milvus(settings)
 
     engine = create_engine(
         neo4j_driver=neo4j_driver,
@@ -66,13 +58,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Agent app은 LLM 연결이 필요하므로 초기화 실패 시 degraded 모드로 기동
     try:
-        from app_factory import make_config_service
-        cfg = make_config_service()
-        app.state.config_service = cfg
+        from app_factory import make_config_repo
+        repo = make_config_repo()
+        app.state.repo = repo
 
         app.state.agent_app = _create_app(
             engine=engine,
-            config_service=cfg,
+            config_repo=repo,
             settings=settings,
         )
         logger.info("agent_app_initialized", extra={"llm_base_url": settings.llm_base_url})

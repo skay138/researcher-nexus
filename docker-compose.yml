@@ -26,7 +26,7 @@ services:
       - nexus_neo4j_data:/data
       - nexus_neo4j_logs:/logs
     healthcheck:
-      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "password", "RETURN 1"]
+      test: ["CMD", "sh", "-c", "cypher-shell -u neo4j -p $${NEO4J_PASSWORD:-password} 'RETURN 1'"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -74,7 +74,7 @@ services:
 
   # ── Milvus (벡터 DB) ───────────────────────────────────────────────────────
   milvus:
-    image: milvusdb/milvus:v2.4.9
+    image: milvusdb/milvus:v2.6.0
     container_name: nexus_milvus
     ports:
       - "5530:19530"   # gRPC (애플리케이션 연결)
@@ -121,13 +121,13 @@ services:
     volumes:
       - nexus_ollama_data:/root/.ollama
     # GPU 사용 시 아래 주석 해제 (NVIDIA Docker 런타임 필요)
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
   # ── API (FastAPI) ──────────────────────────────────────────────────────────
   api:
@@ -160,7 +160,7 @@ services:
       ollama:
         condition: service_started
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:${API_PORT:-5000}/api/v1/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -168,7 +168,7 @@ services:
 
   # ── Attu (Milvus GUI — 선택 사항) ─────────────────────────────────────────
   attu:
-    image: zilliz/attu:v2.4
+    image: zilliz/attu:v2.6
     container_name: nexus_attu
     ports:
       - "5080:3000"
