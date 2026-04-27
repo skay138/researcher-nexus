@@ -16,7 +16,6 @@ from core.executor.execution_engine import ExecutionEngine
 from common.utils.cache import make_cache
 from common.config.query_config import RequestConfig
 from infrastructure.config_repository import MemoryConfigRepository
-from services.semantic_tools import set_engine
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +140,6 @@ def create_engine(
         fetch_details_fn=details_fn,
         cache=cache,
     )
-    set_engine(engine)
     return engine
 
 
@@ -157,6 +155,7 @@ def create_agent_graph(
         agent (CompiledGraph)
     """
     from services.agent_graph import build_graph
+    from services.semantic_tools import make_semantic_tools
 
     schema_registry = engine.compiler.schema_registry
     defaults = RequestConfig._resolve(config_repo)
@@ -168,9 +167,12 @@ def create_agent_graph(
         base_url    = settings.llm_base_url,
     )
 
+    tools = make_semantic_tools(engine)
+
     agent = build_graph(
         schema_registry=schema_registry,
         llm=llm,
+        tools=tools,
         checkpointer=checkpointer,
         max_tool_calls=defaults.max_tool_calls,
     )

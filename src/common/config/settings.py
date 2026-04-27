@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     milvus_port: int = 19530
 
     # ── Cache ──────────────────────────────────────────────────────────────────────────
-    redis_url: str = "redis://localhost:6379"
+    redis_url: str = "redis://localhost:5379"
     cache_ttl_seconds: float = 300.0
 
     # ── Execution ─────────────────────────────────────────────────────────────

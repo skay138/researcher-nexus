@@ -21,7 +21,6 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from core.compiler.schema_registry import SchemaRegistry
 from common.utils.exceptions import LLMError
-from services.semantic_tools import SEMANTIC_TOOLS
 
 logger = logging.getLogger(__name__)
 
@@ -350,11 +349,11 @@ class InstrumentedToolNode(ToolNode):
 # Planner & Agent Nodes
 # ────────────────────────────────────────────────────────────────────────────
 
-def make_planner_node(llm: Any, schema_registry: SchemaRegistry):
+def make_planner_node(llm: Any, schema_registry: SchemaRegistry, tools: list):
     """
     도구 선택 및 다단계 탐색을 수행하는 Planner 노드
     """
-    llm_with_tools = llm.bind_tools(SEMANTIC_TOOLS)
+    llm_with_tools = llm.bind_tools(tools)
 
     def planner_node(state: AgentState) -> dict:
         system_msg = SystemMessage(content=build_planner_prompt(schema_registry))
@@ -477,6 +476,7 @@ def _make_routing(max_calls: int = _DEFAULT_MAX_TOOL_CALLS):
 def build_graph(
     schema_registry: SchemaRegistry,
     llm: Any,
+    tools: list,
     checkpointer=None,
     max_tool_calls: int = _DEFAULT_MAX_TOOL_CALLS,
 ) -> Any:
@@ -485,15 +485,16 @@ def build_graph(
 
     Args:
         schema_registry: 런타임 스키마 주입용
-        llm:              도구가 바인딩되기 전의 LLM 인스턴스
+        llm:             도구가 바인딩되기 전의 LLM 인스턴스
+        tools:           engine이 클로저로 바인딩된 LangChain 도구 목록
         checkpointer:    장애 복구용 (기본: MemorySaver)
 
     Returns:
         컴파일된 LangGraph 앱
     """
-    planner_fn = make_planner_node(llm, schema_registry)
+    planner_fn = make_planner_node(llm, schema_registry, tools)
     agent_fn   = make_agent_node(llm)
-    tools_node = InstrumentedToolNode(SEMANTIC_TOOLS)
+    tools_node = InstrumentedToolNode(tools)
 
     workflow = StateGraph(AgentState)
     workflow.add_node("Planner", planner_fn)
