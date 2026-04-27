@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 import logging
 import time
 
-from core.executor.execution_engine import NodeResult
+from common.types.results import NodeResult
 
 logger = logging.getLogger(__name__)
 

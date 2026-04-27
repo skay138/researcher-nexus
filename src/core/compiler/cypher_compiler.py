@@ -10,9 +10,9 @@ from typing import Optional, List
 import logging
 import re
 
-from common.query_plan import HopDirection, HopSpec, QueryPlan
+from common.types.query_plan import HopDirection, HopSpec, QueryPlan
 from core.compiler.schema_registry import SchemaRegistry
-from common.exceptions import CypherInjectionDetected, UnknownRelationConcept
+from common.utils.exceptions import CypherInjectionDetected, UnknownRelationConcept
 
 logger = logging.getLogger(__name__)
 

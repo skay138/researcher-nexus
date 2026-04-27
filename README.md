@@ -4,17 +4,6 @@
 
 ---
 
-## 해결한 문제
-
-| # | 문제 | 해결 방법 |
-|---|------|-----------|
-| 1 | LLM이 Cypher 직접 생성 (확률적) | `CypherCompiler` 분리 — 완전 결정론적 |
-| 2 | Hop Explosion 제어 없음 | Cypher `LIMIT` + `BeamPruner` 2중 방어 |
-| 3 | 스키마를 LLM에 하드코딩 | `SchemaRegistry` 런타임 동적 주입 |
-| 4 | Low-level 도구 3개 직접 조합 | `execute_dynamic_search` 단일 시맨틱 도구 |
-
----
-
 ## 아키텍처
 
 ```
@@ -58,7 +47,7 @@ User Query
 researcher-nexus/
 ├── src/                         # 애플리케이션 소스 코드
 │   ├── main.py                  # 서버 진입점
-│   ├── app_factory.py           # create_engine / create_app
+│   ├── component_factory.py     # create_engine / create_agent_graph
 │   │
 │   ├── api/                     # FastAPI REST API
 │   │   ├── app.py
@@ -70,12 +59,17 @@ researcher-nexus/
 │   │                            # POST /api/v1/engine/search
 │   │
 │   ├── common/                  # 공통 모듈
-│   │   ├── settings.py          # pydantic-settings 중앙 설정 (인프라)
-│   │   ├── config_service.py    # QueryConfig + ConfigService (실행 파라미터)
-│   │   ├── query_plan.py        # LLM 출력 스키마 (Pydantic)
-│   │   ├── cache.py             # Redis 캐시 추상화
-│   │   ├── exceptions.py        # 도메인 예외 계층
-│   │   └── logging.py           # 구조화 로깅
+│   │   ├── types/               # 공유 도메인 타입
+│   │   │   ├── query_plan.py    # QueryPlan / HopSpec / EntrySearch (LLM 출력 스키마)
+│   │   │   └── results.py       # NodeResult / ExecutionStats / LayerTiming
+│   │   ├── config/              # 설정
+│   │   │   ├── settings.py      # pydantic-settings 중앙 설정 (인프라)
+│   │   │   └── query_config.py  # RequestConfig (실행 파라미터, 요청별 오버라이드)
+│   │   └── utils/               # 공통 유틸리티
+│   │       ├── cache.py         # Redis 캐시 추상화
+│   │       ├── exceptions.py    # 도메인 예외 계층
+│   │       ├── logging.py       # 구조화 로깅
+│   │       └── fixtures.py      # SEED_NODES / SEED_RELATIONS (테스트 전용)
 │   │
 │   ├── core/                    # 비즈니스 로직 (DB 의존 없음)
 │   │   ├── compiler/
@@ -106,8 +100,8 @@ researcher-nexus/
 
 | 계층 | 위치 | 대상 |
 |------|------|------|
-| **인프라 설정** | `.env` → `settings.py` | DB URI, 포트, Redis URL, LLM 접속 URL 등 |
-| **실행 파라미터** | `config_repository.py` → `ConfigService` | beam_width, max_results, model, temperature 등 |
+| **인프라 설정** | `.env` → `common/config/settings.py` | DB URI, 포트, Redis URL, LLM 접속 URL 등 |
+| **실행 파라미터** | `config_repository.py` → `common/config/query_config.py` | beam_width, max_results, model, temperature 등 |
 | **요청별 오버라이드** | API 파라미터 (`QueryConfigSchema`) | 위 실행 파라미터를 요청 단위로 덮어씀 |
 
 ---

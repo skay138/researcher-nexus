@@ -1,3 +1,3 @@
-from app_factory import create_app, create_engine
+from component_factory import create_engine, create_agent_graph
 
-__all__ = ["create_app", "create_engine"]
+__all__ = ["create_engine", "create_agent_graph"]

@@ -21,9 +21,9 @@ from api.schemas import (
     ExecutionStatsSchema,
     NodeResultSchema,
 )
-from common.exceptions import LangGraphBaseError
-from common.query_plan import QueryPlan
-from common.query_config import QueryConfig, RequestConfig
+from common.utils.exceptions import LangGraphBaseError
+from common.types.query_plan import QueryPlan
+from common.config.query_config import QueryConfig, RequestConfig
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Search"])
@@ -141,7 +141,7 @@ async def _stream_agent(
         answer = "".join(answer_parts) or "(응답 없음)"
         
         # 도구 실행 결과를 바탕으로 출처(sources) 추출
-        current_state = agent_app.get_state(run_config)
+        current_state = await agent_app.aget_state(run_config)
         all_messages = current_state.values.get("messages", [])
         
         from langchain_core.messages import ToolMessage

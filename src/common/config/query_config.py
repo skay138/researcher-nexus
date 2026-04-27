@@ -4,7 +4,8 @@ Config Service
 - ConfigRepository: DB 설정 조회 프로토콜 (Mock → RDB 교체 가능)
 - RequestConfig:    현재 요청의 설정값 접근자 (ContextVar 기반)
                     _resolve(repo, override) → API 파라미터 > repo > 내장 기본값 순
-                    asyncio ContextVar로 전파되므로 동기 도구(ToolNode)까지 접근 가능
+                    ToolNode(semantic_tools) / ExecutionEngine 레이어에서 접근.
+                    AgentState로 관리되는 agent_graph 레이어에서는 직접 사용하지 않음.
 """
 
 from __future__ import annotations
@@ -52,19 +53,24 @@ class RequestConfig:
     현재 요청의 설정값 접근자.
     API 파라미터 > ConfigRepository(repo) > 내장 기본값 순으로 반환.
 
-    앱 시작 시 (app_factory):
+    앱 시작 시 (component_factory):
         repo = make_config_repo()
         beam_width = RequestConfig._resolve(repo).beam_width
 
     요청 시작 시 (search.py):
         resolved = RequestConfig._resolve(repo, api_override)
         RequestConfig.set_current(resolved, original_query=body.query)
+        # max_tool_calls 등 AgentState 필드는 search.py에서 직접 꺼내 주입.
 
-    도구 / 엔진에서:
+    ToolNode / ExecutionEngine에서:
         cfg = RequestConfig.current()
-        cfg.max_results      # int, 항상 non-None
-        cfg.original_query   # str
+        cfg.max_results       # int, 항상 non-None
+        cfg.original_query    # str
         cfg.to_query_config() # ExecutionEngine 호환용 QueryConfig
+
+    agent_graph 레이어는 사용하지 않음:
+        - max_tool_calls → AgentState["max_tool_calls"] (search.py가 주입)
+        - original_query → _get_original_query(messages) (messages가 source of truth)
     """
 
     # config_repository 기본값과 동기화 유지

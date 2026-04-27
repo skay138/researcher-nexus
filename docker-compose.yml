@@ -97,13 +97,15 @@ services:
       retries: 10
       start_period: 40s
 
-  # ── Redis (캐시 백엔드) ────────────────────────────────────────────────────
+  # ── Redis (캐시 백엔드 + LangGraph 체크포인터)
+  # redis-stack-server: RediSearch 모듈 포함 (langgraph-checkpoint-redis FT.* 명령어 필요)
   redis:
-    image: redis:7.2-alpine
+    image: redis/redis-stack-server:7.2.0-v14
     container_name: nexus_redis
     ports:
       - "5379:6379"
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --save ""
+    environment:
+      REDIS_ARGS: "--maxmemory 256mb --maxmemory-policy allkeys-lru --save \"\""
     volumes:
       - nexus_redis_data:/data
     healthcheck:

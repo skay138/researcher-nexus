@@ -8,7 +8,7 @@
 import json
 import pytest
 
-from common.fixtures import SEED_NODES as MOCK_NODES, SEED_RELATIONS as MOCK_RELATIONS
+from common.utils.fixtures import SEED_NODES as MOCK_NODES, SEED_RELATIONS as MOCK_RELATIONS
 from infrastructure.in_memory import make_in_memory_adapters as _make_adapters
 mock_vector_search, mock_graph_query, mock_fetch_details = _make_adapters(MOCK_NODES, MOCK_RELATIONS)
 

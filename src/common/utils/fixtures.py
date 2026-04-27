@@ -99,7 +99,6 @@ SEED_NODES: Dict[str, Dict[str, Any]] = {
         "topic": "보트 소형선박",
     },
 
-    # Papers
     "paper_boat_design": {
         "id": "paper_boat_design", "type": "Paper",
         "name": "레저 보트 선형 및 추진 성능 최적화 설계",
@@ -130,7 +129,6 @@ SEED_NODES: Dict[str, Dict[str, Any]] = {
     # 도메인 2: AI/바이오 신약 개발 (AI Drug Discovery)
     # ══════════════════════════════════════════════════════════════════════════
 
-    # Organizations
     "org_bio_kaist": {
         "id": "org_bio_kaist", "type": "Organization",
         "name": "KAIST 바이오및뇌공학과",
@@ -147,7 +145,6 @@ SEED_NODES: Dict[str, Dict[str, Any]] = {
         "text": "AI 신약 개발 플랫폼 Standigm BEST™ 운영 바이오테크 스타트업",
     },
 
-    # Researchers
     "r_choi_bio": {
         "id": "r_choi_bio", "type": "Researcher",
         "name": "최바이오",
@@ -167,7 +164,6 @@ SEED_NODES: Dict[str, Dict[str, Any]] = {
         "topic": "유전체 바이오마커",
     },
 
-    # Projects
     "proj_ai_drug": {
         "id": "proj_ai_drug", "type": "Project",
         "name": "AI 기반 항암제 신약 후보물질 발굴",
@@ -183,7 +179,6 @@ SEED_NODES: Dict[str, Dict[str, Any]] = {
         "topic": "단백질 구조 AlphaFold",
     },
 
-    # Papers
     "paper_gnn_drug": {
         "id": "paper_gnn_drug", "type": "Paper",
         "name": "그래프 신경망 기반 분자 독성 예측",
@@ -206,7 +201,6 @@ SEED_NODES: Dict[str, Dict[str, Any]] = {
         "keywords": "VAE 생성모델 신약분자 약물설계",
     },
 
-    # Patents
     "patent_ai_drug_screen": {
         "id": "patent_ai_drug_screen", "type": "Patent",
         "name": "AI 기반 신약 후보물질 스크리닝 시스템",
@@ -215,7 +209,6 @@ SEED_NODES: Dict[str, Dict[str, Any]] = {
         "patent_number": "KR-2024-0012345",
     },
 
-    # Reports
     "report_ai_pharma": {
         "id": "report_ai_pharma", "type": "Report",
         "name": "AI 신약 개발 글로벌 동향 2024",
@@ -228,7 +221,6 @@ SEED_NODES: Dict[str, Dict[str, Any]] = {
     # 도메인 3: 우주항공 (Aerospace / Small Satellites)
     # ══════════════════════════════════════════════════════════════════════════
 
-    # Organizations
     "org_kari": {
         "id": "org_kari", "type": "Organization",
         "name": "한국항공우주연구원 KARI",
@@ -245,7 +237,6 @@ SEED_NODES: Dict[str, Dict[str, Any]] = {
         "text": "소형 위성 발사용 하이브리드 로켓 한빛 시리즈 개발 스타트업",
     },
 
-    # Researchers
     "r_oh_satellite": {
         "id": "r_oh_satellite", "type": "Researcher",
         "name": "오위성",
@@ -265,7 +256,6 @@ SEED_NODES: Dict[str, Dict[str, Any]] = {
         "topic": "위성 군집 운용",
     },
 
-    # Projects
     "proj_cubesat": {
         "id": "proj_cubesat", "type": "Project",
         "name": "6U 큐브샛 SAR 위성 개발",
@@ -281,7 +271,6 @@ SEED_NODES: Dict[str, Dict[str, Any]] = {
         "topic": "소형발사체 하이브리드로켓",
     },
 
-    # Papers
     "paper_sar_cubesat": {
         "id": "paper_sar_cubesat", "type": "Paper",
         "name": "큐브샛 X밴드 SAR 안테나 설계 최적화",
@@ -297,7 +286,6 @@ SEED_NODES: Dict[str, Dict[str, Any]] = {
         "keywords": "하이브리드로켓 HTPB N2O 추진",
     },
 
-    # Patents
     "patent_sat_payload": {
         "id": "patent_sat_payload", "type": "Patent",
         "name": "초소형 위성용 다중밴드 탑재체 제어 장치",
@@ -306,7 +294,6 @@ SEED_NODES: Dict[str, Dict[str, Any]] = {
         "patent_number": "KR-2024-0098765",
     },
 
-    # Reports
     "report_space_trend": {
         "id": "report_space_trend", "type": "Report",
         "name": "뉴스페이스 산업 현황 및 전망 2024",
@@ -319,7 +306,6 @@ SEED_NODES: Dict[str, Dict[str, Any]] = {
     # 도메인 4: 수소/재생에너지 (Hydrogen & Renewable Energy)
     # ══════════════════════════════════════════════════════════════════════════
 
-    # Organizations
     "org_kier": {
         "id": "org_kier", "type": "Organization",
         "name": "한국에너지기술연구원 KIER",
@@ -336,7 +322,6 @@ SEED_NODES: Dict[str, Dict[str, Any]] = {
         "text": "인산형 연료전지 PAFC 및 고체산화물 연료전지 SOFC 발전 시스템 제조",
     },
 
-    # Researchers
     "r_kwon_hydrogen": {
         "id": "r_kwon_hydrogen", "type": "Researcher",
         "name": "권수소",
@@ -356,7 +341,6 @@ SEED_NODES: Dict[str, Dict[str, Any]] = {
         "topic": "연료전지 PEMFC",
     },
 
-    # Projects
     "proj_green_hydrogen": {
         "id": "proj_green_hydrogen", "type": "Project",
         "name": "재생에너지 연계 그린수소 생산 실증",
@@ -372,7 +356,6 @@ SEED_NODES: Dict[str, Dict[str, Any]] = {
         "topic": "부유식 해상풍력 심해 계통",
     },
 
-    # Papers
     "paper_pem_electrolyzer": {
         "id": "paper_pem_electrolyzer", "type": "Paper",
         "name": "고압 PEM 수전해조 막전극 접합체 최적화",
@@ -395,7 +378,6 @@ SEED_NODES: Dict[str, Dict[str, Any]] = {
         "keywords": "수소저장 금속수소화물 Mg 에너지저장",
     },
 
-    # Patents
     "patent_green_h2": {
         "id": "patent_green_h2", "type": "Patent",
         "name": "재생에너지 연계 수전해 수소 생산 제어 방법",
@@ -411,7 +393,6 @@ SEED_NODES: Dict[str, Dict[str, Any]] = {
         "patent_number": "KR-2023-0078901",
     },
 
-    # Reports
     "report_hydrogen_policy": {
         "id": "report_hydrogen_policy", "type": "Report",
         "name": "국내 수소 경제 로드맵 2030",
@@ -435,108 +416,82 @@ SEED_NODES: Dict[str, Dict[str, Any]] = {
 
 SEED_RELATIONS: Dict[str, List[Dict[str, str]]] = {
 
-    # ── AFFILIATED_WITH (Researcher → Organization) ────────────────────────
     "AFFILIATED_WITH": [
-        # 해양
         {"from": "r_kim_ocean",     "to": "org_kaist_ocean"},
         {"from": "r_lee_maritime",  "to": "org_kriso"},
         {"from": "r_chung_ship",    "to": "org_kriso"},
         {"from": "r_park_ocean",    "to": "org_samsung_heavy"},
-        # AI/바이오
         {"from": "r_choi_bio",      "to": "org_bio_kaist"},
         {"from": "r_jung_pharma",   "to": "org_standigm"},
         {"from": "r_han_genomics",  "to": "org_genexine"},
-        # 우주항공
         {"from": "r_oh_satellite",  "to": "org_satrec"},
         {"from": "r_shin_launch",   "to": "org_innospace"},
         {"from": "r_yoon_space",    "to": "org_kari"},
-        # 수소/재생에너지
         {"from": "r_kwon_hydrogen", "to": "org_kier"},
         {"from": "r_lim_wind",      "to": "org_kier"},
         {"from": "r_song_fuelcell", "to": "org_hyundai_hydrogen"},
     ],
 
-    # ── PARTICIPATED_IN (Researcher → Project) ─────────────────────────────
     "PARTICIPATED_IN": [
-        # 해양
         {"from": "r_lee_maritime",  "to": "proj_autonomous_ship"},
         {"from": "r_kim_ocean",     "to": "proj_autonomous_ship"},
         {"from": "r_park_ocean",    "to": "proj_green_ship"},
-        # AI/바이오
         {"from": "r_choi_bio",      "to": "proj_ai_drug"},
         {"from": "r_jung_pharma",   "to": "proj_ai_drug"},
         {"from": "r_choi_bio",      "to": "proj_protein_fold"},
         {"from": "r_han_genomics",  "to": "proj_protein_fold"},
-        # 우주항공
         {"from": "r_oh_satellite",  "to": "proj_cubesat"},
         {"from": "r_yoon_space",    "to": "proj_cubesat"},
         {"from": "r_shin_launch",   "to": "proj_launch_vehicle"},
-        # 수소/재생에너지
         {"from": "r_kwon_hydrogen", "to": "proj_green_hydrogen"},
         {"from": "r_lim_wind",      "to": "proj_offshore_wind"},
         {"from": "r_lim_wind",      "to": "proj_green_hydrogen"},
         {"from": "r_song_fuelcell", "to": "proj_green_hydrogen"},
     ],
 
-    # ── AUTHORED (Researcher → Paper) ──────────────────────────────────────
     "AUTHORED": [
-        # 해양
         {"from": "r_lee_maritime",  "to": "paper_ship_ai"},
         {"from": "r_kim_ocean",     "to": "paper_ship_ai"},
         {"from": "r_park_ocean",    "to": "paper_lng_propulsion"},
         {"from": "r_chung_ship",    "to": "paper_boat_design"},
-        # AI/바이오
         {"from": "r_choi_bio",      "to": "paper_gnn_drug"},
         {"from": "r_choi_bio",      "to": "paper_alphafold_rare"},
         {"from": "r_jung_pharma",   "to": "paper_generative_mol"},
         {"from": "r_han_genomics",  "to": "paper_alphafold_rare"},
-        # 우주항공
         {"from": "r_oh_satellite",  "to": "paper_sar_cubesat"},
         {"from": "r_shin_launch",   "to": "paper_hybrid_rocket"},
         {"from": "r_yoon_space",    "to": "paper_sar_cubesat"},
-        # 수소/재생에너지
         {"from": "r_kwon_hydrogen", "to": "paper_pem_electrolyzer"},
         {"from": "r_lim_wind",      "to": "paper_floating_wind"},
         {"from": "r_song_fuelcell", "to": "paper_h2_storage"},
         {"from": "r_kwon_hydrogen", "to": "paper_h2_storage"},
     ],
 
-    # ── INVENTED (Researcher → Patent) ─────────────────────────────────────
     "INVENTED": [
-        # 해양
         {"from": "r_lee_maritime",  "to": "patent_ship_nav"},
-        # AI/바이오
         {"from": "r_choi_bio",      "to": "patent_ai_drug_screen"},
         {"from": "r_jung_pharma",   "to": "patent_ai_drug_screen"},
-        # 우주항공
         {"from": "r_oh_satellite",  "to": "patent_sat_payload"},
         {"from": "r_yoon_space",    "to": "patent_sat_payload"},
-        # 수소/재생에너지
         {"from": "r_kwon_hydrogen", "to": "patent_green_h2"},
         {"from": "r_lim_wind",      "to": "patent_green_h2"},
         {"from": "r_song_fuelcell", "to": "patent_fuel_cell_stack"},
     ],
 
-    # ── PRODUCED (Organization → Project) ──────────────────────────────────
     "PRODUCED": [
-        # 해양
         {"from": "org_kriso",           "to": "proj_autonomous_ship"},
         {"from": "org_samsung_heavy",   "to": "proj_green_ship"},
-        # AI/바이오
         {"from": "org_bio_kaist",       "to": "proj_ai_drug"},
         {"from": "org_standigm",        "to": "proj_ai_drug"},
         {"from": "org_bio_kaist",       "to": "proj_protein_fold"},
-        # 우주항공
         {"from": "org_satrec",          "to": "proj_cubesat"},
         {"from": "org_innospace",       "to": "proj_launch_vehicle"},
         {"from": "org_kari",            "to": "proj_launch_vehicle"},
-        # 수소/재생에너지
         {"from": "org_kier",            "to": "proj_green_hydrogen"},
         {"from": "org_kier",            "to": "proj_offshore_wind"},
         {"from": "org_hyundai_hydrogen","to": "proj_green_hydrogen"},
     ],
 
-    # ── CITES (Paper → Paper) ──────────────────────────────────────────────
     "CITES": [
         {"from": "paper_gnn_drug",        "to": "paper_alphafold_rare"},
         {"from": "paper_generative_mol",  "to": "paper_gnn_drug"},
@@ -545,7 +500,6 @@ SEED_RELATIONS: Dict[str, List[Dict[str, str]]] = {
         {"from": "paper_floating_wind",   "to": "paper_pem_electrolyzer"},
     ],
 
-    # ── PUBLISHED_IN (Project → Report) ────────────────────────────────────
     "PUBLISHED_IN": [
         {"from": "proj_autonomous_ship",  "to": "report_maritime_trend"},
         {"from": "proj_ai_drug",          "to": "report_ai_pharma"},

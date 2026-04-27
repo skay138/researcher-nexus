@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Tuple
 
-from core.executor.execution_engine import NodeResult
+from common.types.results import NodeResult
 
 
 def make_in_memory_adapters(

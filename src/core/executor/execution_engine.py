@@ -13,11 +13,12 @@ from typing import Any, Callable, Dict, Generator, List, Optional
 import logging
 import time
 
-from common.query_plan import EntrySearch, FinalFilter, HopSpec, QueryPlan
-from common.query_config import QueryConfig
+from common.types.query_plan import EntrySearch, FinalFilter, HopSpec, QueryPlan
+from common.types.results import NodeResult, ExecutionStats, LayerTiming
+from common.config.query_config import QueryConfig
 from core.compiler.cypher_compiler import CypherCompiler
 from core.executor.beam_pruner import BeamPruner
-from common.cache import CacheBackend, make_cache_key
+from common.utils.cache import CacheBackend, make_cache_key
 
 
 class _NullCache:
@@ -32,45 +33,6 @@ logger = logging.getLogger(__name__)
 # ────────────────────────────────────────────────────────────────────────────
 # Result types
 # ────────────────────────────────────────────────────────────────────────────
-
-@dataclass
-class NodeResult:
-    id:   str
-    type: str
-    name: Optional[str]    = None
-    text: Optional[str]    = None
-    path: str              = ""              # 이 노드에 도달하기까지의 탐색 경로 (Provenance)
-    meta: Dict[str, Any]   = field(default_factory=dict)
-
-
-@dataclass
-class LayerTiming:
-    label:      str
-    elapsed_ms: float
-    extra:      Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class ExecutionStats:
-    total_elapsed_s:    float             = 0.0
-    hop_counts:         List[int]         = field(default_factory=list)  # 각 hop 후 노드 수
-    path_summary:       str               = ""  # 에이전트용 가벼운 탐색 경로 요약 (문자열)
-    cache_hits:         int               = 0
-    db_calls:           int               = 0
-    pruned_total:       int               = 0
-    layer_timings:      List[LayerTiming] = field(default_factory=list)
-
-    def timing_summary(self) -> str:
-        if not self.layer_timings:
-            return "(no timing data)"
-        lines = ["─── Layer Timing ──────────────────────────────────────────────"]
-        for t in self.layer_timings:
-            extra_str = ("  " + "  ".join(f"{k}={v}" for k, v in t.extra.items())) if t.extra else ""
-            lines.append(f"  {t.label:<50} {t.elapsed_ms:>8.1f} ms{extra_str}")
-        lines.append(f"  {'TOTAL':<50} {self.total_elapsed_s * 1000:>8.1f} ms")
-        lines.append("────────────────────────────────────────────────────────────")
-        return "\n".join(lines)
-
 
 # ────────────────────────────────────────────────────────────────────────────
 # Timing helper
@@ -139,10 +101,10 @@ class ExecutionEngine:
         Returns:
             (결과 노드 목록, 실행 통계)
         """
-        beam_width        = config.beam_width        if config and config.beam_width        is not None else None
-        max_results       = config.max_results       if config and config.max_results       is not None else plan.max_results
-        entry_min_score   = config.entry_min_score   if config and config.entry_min_score   is not None else None
-        entry_score_ratio = config.entry_score_ratio if config and config.entry_score_ratio is not None else None
+        beam_width        = config.beam_width        if config is not None else None
+        max_results       = config.max_results       if config is not None else plan.max_results
+        entry_min_score   = config.entry_min_score   if config is not None else None
+        entry_score_ratio = config.entry_score_ratio if config is not None else None
 
         stats = ExecutionStats()
         t_start = time.time()

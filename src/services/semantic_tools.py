@@ -12,12 +12,13 @@ import threading
 
 from langchain_core.tools import tool
 
-from common.query_config import RequestConfig
-from common.exceptions import InvalidNodeType, ToolError
-from common.query_plan import (
+from common.config.query_config import RequestConfig
+from common.utils.exceptions import InvalidNodeType, ToolError
+from common.types.query_plan import (
     EntrySearch, FinalFilter, HopDirection, HopSpec, QueryPlan,
 )
-from core.executor.execution_engine import ExecutionEngine, NodeResult
+from core.executor.execution_engine import ExecutionEngine
+from common.types.results import NodeResult
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ def set_engine(engine: ExecutionEngine) -> None:
 
 
 def _get_engine() -> ExecutionEngine:
-    from common.exceptions import EngineNotInitializedError
+    from common.utils.exceptions import EngineNotInitializedError
     with _engine_lock:
         if _engine is None:
             raise EngineNotInitializedError("ExecutionEngine not initialized.")

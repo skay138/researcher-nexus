@@ -20,7 +20,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.checkpoint.memory import MemorySaver
 
 from core.compiler.schema_registry import SchemaRegistry
-from common.exceptions import LLMError
+from common.utils.exceptions import LLMError
 from services.semantic_tools import SEMANTIC_TOOLS
 
 logger = logging.getLogger(__name__)
@@ -533,7 +533,7 @@ def run_query(app, query: str, session_id: str = "default") -> str:
         에이전트 최종 답변 텍스트
     """
     from langchain_core.messages import HumanMessage
-    from common.settings import get_settings
+    from common.config.settings import get_settings
 
     initial_state: AgentState = {
         "messages":        [HumanMessage(content=query)],

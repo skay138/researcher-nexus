@@ -7,13 +7,14 @@ Application Factory
 from __future__ import annotations
 from typing import Optional
 import logging
+import time
 
 from core.compiler.schema_registry import SchemaRegistry
 from core.compiler.cypher_compiler import CypherCompiler
 from core.executor.beam_pruner import BeamPruner
 from core.executor.execution_engine import ExecutionEngine
-from common.cache import make_cache
-from common.query_config import RequestConfig
+from common.utils.cache import make_cache
+from common.config.query_config import RequestConfig
 from infrastructure.config_repository import MemoryConfigRepository
 from services.semantic_tools import set_engine
 
@@ -89,7 +90,7 @@ def create_engine(
     core/LLM 기본 설정은 config_repo(DB)에서 읽는다.
     """
     if settings is None:
-        from common.settings import get_settings
+        from common.config.settings import get_settings
         settings = get_settings()
 
     repo = config_repo or make_config_repo()
@@ -105,8 +106,14 @@ def create_engine(
 
     st_model = settings.sentence_transformer_model
     from sentence_transformers import SentenceTransformer
-    vectorizer = SentenceTransformer(st_model)
+    _vectorizer = SentenceTransformer(st_model)
     logger.info("SentenceTransformer loaded: %s", st_model)
+
+    def _embedding_fn(texts):
+        t0 = time.perf_counter()
+        result = _vectorizer.encode(texts, show_progress_bar=False)
+        logger.info("[Embed] %.1f ms | texts=%d", (time.perf_counter() - t0) * 1000, len(texts))
+        return result
 
     pruner = BeamPruner(beam_width=beam_width)
 
@@ -122,7 +129,7 @@ def create_engine(
     details_fn = make_fetch_details_fn(neo4j_driver)
     vector_fn  = make_vector_search_fn(
         milvus_client,
-        embedding_fn=vectorizer.encode,
+        embedding_fn=_embedding_fn,
     )
     logger.info("DB 연결 완료 (Neo4j + Milvus)")
 
@@ -138,15 +145,16 @@ def create_engine(
     return engine
 
 
-def create_app(
+def create_agent_graph(
     engine,
     config_repo,
     settings,
+    checkpointer=None,
 ):
     """
-    LangGraph 에이전트 앱 생성.
+    LangGraph 에이전트 그래프 생성.
     Returns:
-        app (CompiledGraph)
+        agent (CompiledGraph)
     """
     from services.agent_graph import build_graph
 
@@ -160,12 +168,17 @@ def create_app(
         base_url    = settings.llm_base_url,
     )
 
-    app = build_graph(schema_registry=schema_registry, llm=llm, max_tool_calls=defaults.max_tool_calls)
-    
+    agent = build_graph(
+        schema_registry=schema_registry,
+        llm=llm,
+        checkpointer=checkpointer,
+        max_tool_calls=defaults.max_tool_calls,
+    )
+
     logger.info(
         "LangGraph Agent 준비 완료 (provider=%s, base_url=%s, model=%s, max_tool_calls=%d)",
         settings.llm_provider if settings else "ollama",
         settings.llm_base_url,
         defaults.model, defaults.max_tool_calls,
     )
-    return app
+    return agent

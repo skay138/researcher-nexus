@@ -11,7 +11,7 @@ import sys
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.settings import Settings
+    from common.config.settings import Settings
 
 
 class HealthCheckFilter(logging.Filter):

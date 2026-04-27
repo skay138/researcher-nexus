@@ -19,8 +19,8 @@ from fastapi.staticfiles import StaticFiles
 from api.middleware import CorrelationIDMiddleware
 from api.routes.health import router as health_router
 from api.routes.search import router as search_router
-from common.exceptions import LangGraphBaseError
-from common.settings import Settings, get_settings
+from common.utils.exceptions import LangGraphBaseError
+from common.config.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings: Settings = app.state.settings
 
     # ── Startup ───────────────────────────────────────────────────────────────
-    from common.logging import configure_logging
+    from common.utils.logging import configure_logging
     configure_logging(settings)
 
     logger.info(
@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         extra={"environment": settings.environment},
     )
 
-    from app_factory import create_engine, create_app as _create_app, _open_neo4j, _open_milvus
+    from component_factory import create_engine, create_agent_graph, _open_neo4j, _open_milvus
     from core.compiler.schema_registry import SchemaRegistry
 
     neo4j_driver = _open_neo4j(settings)
@@ -58,14 +58,30 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Agent app은 LLM 연결이 필요하므로 초기화 실패 시 degraded 모드로 기동
     try:
-        from app_factory import make_config_repo
+        from component_factory import make_config_repo
         repo = make_config_repo()
         app.state.repo = repo
 
-        app.state.agent_app = _create_app(
+        # AsyncRedisSaver: astream() 등 async LangGraph API와 호환
+        try:
+            from langgraph.checkpoint.redis.aio import AsyncRedisSaver
+            checkpointer = AsyncRedisSaver(settings.redis_url)
+            await checkpointer.setup()
+            logger.info("AsyncRedisSaver checkpointer initialized: %s", settings.redis_url)
+        except ImportError:
+            from langgraph.checkpoint.memory import MemorySaver
+            checkpointer = MemorySaver()
+            logger.warning(
+                "langgraph-checkpoint-redis not installed — falling back to MemorySaver "
+                "(세션이 서버 재시작 시 초기화됩니다). "
+                "영속적 세션이 필요하면: pip install langgraph-checkpoint-redis"
+            )
+
+        app.state.agent_app = create_agent_graph(
             engine=engine,
             config_repo=repo,
             settings=settings,
+            checkpointer=checkpointer,
         )
         logger.info("agent_app_initialized", extra={"llm_base_url": settings.llm_base_url})
     except Exception as e:

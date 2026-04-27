@@ -48,7 +48,7 @@ def make_vector_search_fn(
         top_k: int = 20,
     ) -> List[tuple[str, float]]:
         from pymilvus import AnnSearchRequest
-        from common.query_config import RequestConfig
+        from common.config.query_config import RequestConfig
         cfg = RequestConfig.current()
         sparse_weight = cfg.sparse_weight
         dense_weight  = cfg.dense_weight

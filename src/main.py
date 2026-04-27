@@ -11,7 +11,7 @@ Application entry point.
 """
 
 from api.app import create_fastapi_app
-from common.settings import get_settings
+from common.config.settings import get_settings
 
 settings = get_settings()
 app = create_fastapi_app(settings)
