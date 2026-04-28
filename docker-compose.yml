@@ -114,6 +114,26 @@ services:
       timeout: 3s
       retries: 5
 
+  # ── MariaDB (source of truth — 노드 원본 + config) ────────────────────────
+  mariadb:
+    image: mariadb:11.3
+    container_name: nexus_mariadb
+    ports:
+      - "5306:3306"
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-rootpassword}
+      MARIADB_DATABASE: nexus
+      MARIADB_USER: nexus
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:-nexus}
+    volumes:
+      - nexus_mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
   # ── Ollama (LLM 추론 엔진) ────────────────────────────────────────────────
   ollama:
     image: ollama/ollama:latest
@@ -147,6 +167,7 @@ services:
       MILVUS_HOST: milvus
       MILVUS_PORT: 19530
       REDIS_URL: redis://redis:6379
+      MARIADB_URL: mysql+pymysql://nexus:${MARIADB_PASSWORD:-nexus}@mariadb:3306/nexus
       # LLM 추론 서버 (Docker 내부 네트워크 이용)
       LLM_BASE_URL: http://ollama:11434
     volumes:
@@ -158,6 +179,8 @@ services:
       milvus:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      mariadb:
         condition: service_healthy
       ollama:
         condition: service_started
@@ -184,6 +207,7 @@ services:
 
 
 volumes:
+  nexus_mariadb_data:
   nexus_neo4j_data:
   nexus_neo4j_logs:
   nexus_etcd_data:

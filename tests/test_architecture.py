@@ -10,7 +10,7 @@ import pytest
 
 from common.utils.fixtures import SEED_NODES as MOCK_NODES, SEED_RELATIONS as MOCK_RELATIONS
 from infrastructure.in_memory import make_in_memory_adapters as _make_adapters
-mock_vector_search, mock_graph_query, mock_fetch_details = _make_adapters(MOCK_NODES, MOCK_RELATIONS)
+mock_vector_search, mock_graph_query, mock_get_by_ids, mock_fetch_details = _make_adapters(MOCK_NODES, MOCK_RELATIONS)
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -43,7 +43,7 @@ def engine(compiler, pruner):
         pruner=pruner,
         vector_search_fn=mock_vector_search,
         graph_query_fn=mock_graph_query,
-        fetch_details_fn=mock_fetch_details,
+        vector_get_by_ids_fn=mock_get_by_ids,
     )
 
 
@@ -55,7 +55,7 @@ class TestCypherCompiler:
     """동일 입력 → 동일 Cypher (결정론적)"""
 
     def test_compile_is_deterministic(self, compiler):
-        from common.query_plan import HopDirection, HopSpec
+        from common.types.query_plan import HopDirection, HopSpec
         hop = HopSpec(
             from_type="Project", relation_concept="participation",
             to_type="Researcher", direction=HopDirection.INBOUND,
@@ -65,7 +65,7 @@ class TestCypherCompiler:
                compiler.compile_single_hop(hop, ids, limit=100)
 
     def test_relation_concept_resolved(self, compiler):
-        from common.query_plan import HopSpec, HopDirection
+        from common.types.query_plan import HopSpec, HopDirection
         hop = HopSpec(
             from_type="Researcher", relation_concept="authored",
             to_type="Paper", direction=HopDirection.OUTBOUND,
@@ -75,15 +75,15 @@ class TestCypherCompiler:
         assert "authored" not in cypher
 
     def test_unknown_relation_raises(self, compiler):
-        from core.compiler.cypher_compiler import UnknownRelationConcept
-        from common.query_plan import HopSpec, HopDirection
+        from common.utils.exceptions import UnknownRelationConcept
+        from common.types.query_plan import HopSpec, HopDirection
         hop = HopSpec(from_type="A", relation_concept="nonexistent_xyz",
                       to_type="B", direction=HopDirection.OUTBOUND)
         with pytest.raises(UnknownRelationConcept):
             compiler.compile_single_hop(hop, ["id_1"], limit=10)
 
     def test_direction_inbound_arrow(self, compiler):
-        from common.query_plan import HopSpec, HopDirection
+        from common.types.query_plan import HopSpec, HopDirection
         hop = HopSpec(
             from_type="Organization", relation_concept="belongs_to",
             to_type="Researcher", direction=HopDirection.INBOUND,
@@ -92,8 +92,8 @@ class TestCypherCompiler:
         assert "<-[" in cypher
 
     def test_filter_injection_blocked(self, compiler):
-        from common.query_plan import HopSpec, HopDirection
-        from common.exceptions import CypherInjectionDetected
+        from common.types.query_plan import HopSpec, HopDirection
+        from common.utils.exceptions import CypherInjectionDetected
         hop = HopSpec(
             from_type="Project", relation_concept="participation",
             to_type="Researcher", direction=HopDirection.INBOUND,
@@ -121,7 +121,7 @@ class TestHopExplosion:
 
     def test_query_plan_max_hops_enforced(self):
         from pydantic import ValidationError
-        from common.query_plan import EntrySearch, HopDirection, HopSpec, QueryPlan
+        from common.types.query_plan import EntrySearch, HopDirection, HopSpec, QueryPlan
         too_many = [
             HopSpec(from_type="A", relation_concept="participation",
                     to_type="B", direction=HopDirection.OUTBOUND)
@@ -134,7 +134,7 @@ class TestHopExplosion:
             )
 
     def test_cypher_has_limit_per_hop(self, compiler):
-        from common.query_plan import HopSpec, HopDirection
+        from common.types.query_plan import HopSpec, HopDirection
         hop = HopSpec(from_type="Project", relation_concept="participation",
                       to_type="Researcher", direction=HopDirection.INBOUND)
         cypher = compiler.compile_single_hop(hop, ["proj_101"], limit=500)
@@ -181,18 +181,20 @@ class TestSemanticTools:
         from core.compiler.cypher_compiler import CypherCompiler
         from core.executor.beam_pruner import BeamPruner
         from core.executor.execution_engine import ExecutionEngine
-        from services.semantic_tools import set_engine
-        set_engine(ExecutionEngine(
+        from services.semantic_tools import make_semantic_tools
+        engine = ExecutionEngine(
             compiler=CypherCompiler(SchemaRegistry()),
             pruner=BeamPruner(beam_width=50),
             vector_search_fn=mock_vector_search,
             graph_query_fn=mock_graph_query,
-            fetch_details_fn=mock_fetch_details,
-        ))
+            vector_get_by_ids_fn=mock_get_by_ids,
+        )
+        tools = make_semantic_tools(engine, mock_fetch_details)
+        self.execute_dynamic_search = tools[0]
+        self.get_node_by_ids = tools[1]
 
     def test_basic_search_returns_string(self):
-        from services.semantic_tools import execute_dynamic_search
-        result = execute_dynamic_search.func(
+        result = self.execute_dynamic_search.func(
             vector_search_concept="해양 사업",
             vector_search_node_type="Project",
             neo4j_hops=[],
@@ -200,8 +202,7 @@ class TestSemanticTools:
         assert isinstance(result, str)
 
     def test_search_with_hops(self):
-        from services.semantic_tools import execute_dynamic_search
-        result = execute_dynamic_search.func(
+        result = self.execute_dynamic_search.func(
             vector_search_concept="해양 사업",
             vector_search_node_type="Project",
             neo4j_hops=[{
@@ -212,15 +213,13 @@ class TestSemanticTools:
         assert isinstance(result, str)
 
     def test_tool_hides_db_internals(self):
-        from services.semantic_tools import execute_dynamic_search
         import inspect
-        params = list(inspect.signature(execute_dynamic_search.func).parameters.keys())
+        params = list(inspect.signature(self.execute_dynamic_search.func).parameters.keys())
         for internal in ["cypher", "node_ids", "session", "driver"]:
             assert internal not in params, f"내부 DB 파라미터 '{internal}'이 노출되면 안 됨"
 
     def test_no_results_returns_message(self):
-        from services.semantic_tools import execute_dynamic_search
-        result = execute_dynamic_search.func(
+        result = self.execute_dynamic_search.func(
             vector_search_concept="존재하지않는키워드xyz123",
             vector_search_node_type="Project",
             neo4j_hops=[],
@@ -239,18 +238,16 @@ class TestIntegration:
         from core.compiler.cypher_compiler import CypherCompiler
         from core.executor.beam_pruner import BeamPruner
         from core.executor.execution_engine import ExecutionEngine
-        from services.semantic_tools import set_engine
         self.engine = ExecutionEngine(
             compiler=CypherCompiler(SchemaRegistry()),
             pruner=BeamPruner(beam_width=50),
             vector_search_fn=mock_vector_search,
             graph_query_fn=mock_graph_query,
-            fetch_details_fn=mock_fetch_details,
+            vector_get_by_ids_fn=mock_get_by_ids,
         )
-        set_engine(self.engine)
 
     def test_complex_4hop_query(self):
-        from common.query_plan import (
+        from common.types.query_plan import (
             EntrySearch, FinalFilter, HopDirection, HopSpec, QueryPlan,
         )
         plan = QueryPlan(
@@ -277,7 +274,7 @@ class TestIntegration:
         assert stats.total_elapsed_s > 0
 
     def test_execution_stats_collected(self):
-        from common.query_plan import EntrySearch, QueryPlan
+        from common.types.query_plan import EntrySearch, QueryPlan
         plan = QueryPlan(
             entry_search=EntrySearch(concept="해양", node_type="Project"),
             max_results=5,
@@ -336,14 +333,15 @@ class TestPatentReportDomain:
         from core.compiler.cypher_compiler import CypherCompiler
         from core.executor.beam_pruner import BeamPruner
         from core.executor.execution_engine import ExecutionEngine
-        from services.semantic_tools import set_engine, execute_dynamic_search
-        set_engine(ExecutionEngine(
+        from services.semantic_tools import make_semantic_tools
+        engine = ExecutionEngine(
             compiler=CypherCompiler(SchemaRegistry()),
             pruner=BeamPruner(beam_width=50),
             vector_search_fn=mock_vector_search,
             graph_query_fn=mock_graph_query,
-            fetch_details_fn=mock_fetch_details,
-        ))
+            vector_get_by_ids_fn=mock_get_by_ids,
+        )
+        execute_dynamic_search = make_semantic_tools(engine, mock_fetch_details)[0]
         result = execute_dynamic_search.func(
             vector_search_concept="해양 에너지",
             vector_search_node_type="Patent",
@@ -362,7 +360,7 @@ class TestPatentReportDomain:
 class TestCache:
 
     def test_expired_entries_evicted_on_get(self):
-        from common.cache import MemoryCache
+        from common.utils.cache import MemoryCache
         import time
         cache = MemoryCache(ttl=0.01)
         cache.set("key1", "value1")
@@ -371,15 +369,15 @@ class TestCache:
         assert "key1" not in cache._store
 
     def test_max_size_eviction(self):
-        from common.cache import MemoryCache
+        from common.utils.cache import MemoryCache
         cache = MemoryCache(ttl=300, max_size=3)
         for k in ("a", "b", "c", "d"):
             cache.set(k, 1)
         assert len(cache._store) <= 3
 
     def test_hop_cache_key_includes_context(self):
-        from common.cache import make_cache_key
-        from common.query_plan import HopSpec, HopDirection
+        from common.utils.cache import make_cache_key
+        from common.types.query_plan import HopSpec, HopDirection
         hop = HopSpec(from_type="A", relation_concept="participation",
                       to_type="B", direction=HopDirection.OUTBOUND)
         ids = ["id_1", "id_2"]
@@ -397,8 +395,8 @@ class TestCypherSanitization:
     def test_malicious_id_raises(self):
         from core.compiler.cypher_compiler import CypherCompiler
         from core.compiler.schema_registry import SchemaRegistry
-        from common.exceptions import CypherInjectionDetected
-        from common.query_plan import HopSpec, HopDirection
+        from common.utils.exceptions import CypherInjectionDetected
+        from common.types.query_plan import HopSpec, HopDirection
         compiler = CypherCompiler(SchemaRegistry(driver=None))
         hop = HopSpec(from_type="Project", relation_concept="participation",
                       to_type="Researcher", direction=HopDirection.INBOUND)
@@ -410,8 +408,8 @@ class TestCypherSanitization:
     def test_malicious_filter_key_raises(self):
         from core.compiler.cypher_compiler import CypherCompiler
         from core.compiler.schema_registry import SchemaRegistry
-        from common.exceptions import CypherInjectionDetected
-        from common.query_plan import HopSpec, HopDirection
+        from common.utils.exceptions import CypherInjectionDetected
+        from common.types.query_plan import HopSpec, HopDirection
         compiler = CypherCompiler(SchemaRegistry(driver=None))
         hop = HopSpec(
             from_type="Project", relation_concept="participation",
@@ -424,7 +422,7 @@ class TestCypherSanitization:
     def test_safe_ids_pass(self):
         from core.compiler.cypher_compiler import CypherCompiler
         from core.compiler.schema_registry import SchemaRegistry
-        from common.query_plan import HopSpec, HopDirection
+        from common.types.query_plan import HopSpec, HopDirection
         compiler = CypherCompiler(SchemaRegistry(driver=None))
         hop = HopSpec(from_type="Project", relation_concept="participation",
                       to_type="Researcher", direction=HopDirection.INBOUND)

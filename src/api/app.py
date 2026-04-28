@@ -39,11 +39,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         extra={"environment": settings.environment},
     )
 
-    from component_factory import create_engine, create_agent_graph, _open_neo4j, _open_milvus
+    from component_factory import create_engine, create_agent_graph, make_fetch_details, _open_neo4j, _open_milvus
     from core.compiler.schema_registry import SchemaRegistry
 
     neo4j_driver = _open_neo4j(settings)
     milvus_client = _open_milvus(settings)
+
+    # MariaDB 스키마 초기화 (테이블 없으면 생성)
+    try:
+        from infrastructure.mariadb import ensure_schema
+        ensure_schema(settings.mariadb_url)
+    except Exception as e:
+        logger.warning("MariaDB schema init failed: %s — fetch_details will use Neo4j fallback", e)
 
     engine = create_engine(
         neo4j_driver=neo4j_driver,
@@ -59,7 +66,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Agent app은 LLM 연결이 필요하므로 초기화 실패 시 degraded 모드로 기동
     try:
         from component_factory import make_config_repo
-        repo = make_config_repo()
+        repo = make_config_repo(settings)
         app.state.repo = repo
 
         # AsyncRedisSaver: astream() 등 async LangGraph API와 호환
@@ -77,8 +84,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 "영속적 세션이 필요하면: pip install langgraph-checkpoint-redis"
             )
 
+        fetch_details_fn = make_fetch_details(settings, neo4j_driver)
         app.state.agent_app = create_agent_graph(
             engine=engine,
+            fetch_details_fn=fetch_details_fn,
             config_repo=repo,
             settings=settings,
             checkpointer=checkpointer,

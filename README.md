@@ -35,7 +35,8 @@ User Query
                  ▼
 ┌─────────────────────────────────┐
 │  L4: Data Layer                 │
-│  Neo4j │ Milvus │ Redis         │
+│  Neo4j │ Milvus │ MariaDB       │
+│  Redis (캐시)                   │
 └─────────────────────────────────┘
 ```
 
@@ -80,18 +81,20 @@ researcher-nexus/
 │   │       └── execution_engine.py  # hop-by-hop 실행 + 캐싱 + 통계
 │   │
 │   ├── infrastructure/          # DB 어댑터 (콜백 주입 패턴)
-│   │   ├── config_repository.py # Mock ConfigRepository (RDB 전환 예정)
-│   │   ├── neo4j.py             # Neo4j 어댑터
-│   │   └── milvus.py            # Milvus 어댑터
+│   │   ├── neo4j.py             # Neo4j 어댑터 (관계 탐색 전용)
+│   │   ├── milvus.py            # Milvus 어댑터 (검색 인덱스 + 기본 필드)
+│   │   ├── mariadb.py           # MariaDB 어댑터 (source of truth)
+│   │   ├── config_repository.py # 설정 저장소 (Memory / MariaDB)
+│   │   └── in_memory.py         # 인메모리 어댑터 (테스트 전용)
 │   │
 │   └── services/                # 애플리케이션 서비스
-│       ├── agent_graph.py       # LangGraph 3-node 에이전트
-│       └── semantic_tools.py    # execute_dynamic_search (단일 도구)
+│       ├── agent_graph.py       # LangGraph 4-node 에이전트
+│       └── semantic_tools.py    # execute_dynamic_search / get_details_by_ids
 │
 ├── tests/                       # pytest 테스트 스위트
 ├── scripts/
-│   └── seed_data.py             # Neo4j + Milvus 초기 데이터 적재
-├── docker-compose.yml           # Neo4j + Milvus + Redis 로컬 스택
+│   └── seed_data.py             # Neo4j + Milvus + MariaDB 초기 데이터 적재
+├── docker-compose.yml           # Neo4j + Milvus + MariaDB + Redis 로컬 스택
 ├── pytest.ini                   # pythonpath = src
 └── .env.example
 ```
@@ -125,7 +128,7 @@ pip install -r requirements.txt
 
 ```bash
 cp .env.example .env
-# .env에서 NEO4J_PASSWORD, REDIS_URL 등 실제 값으로 수정
+# .env에서 NEO4J_PASSWORD, MARIADB_PASSWORD, REDIS_URL 등 실제 값으로 수정
 ```
 
 ### 3. 인프라 기동 (Docker)
@@ -138,12 +141,13 @@ docker compose ps
 ### 4. 초기 데이터 적재
 
 ```bash
-# Neo4j + Milvus 모두 시드
+# Neo4j + Milvus + MariaDB 모두 시드
 python scripts/seed_data.py
 
-# 개별 시드
+# 저장소별 개별 시드
 python scripts/seed_data.py --neo4j-only
 python scripts/seed_data.py --milvus-only
+python scripts/seed_data.py --mariadb-only
 
 # 데이터 초기화 후 재적재
 python scripts/seed_data.py --clear
@@ -178,8 +182,9 @@ pytest tests/ -v
 |--------|------|------|
 | **api** | **5000** | **FastAPI 서버** |
 | Ollama | 5434 | LLM 추론 엔진 |
-| Neo4j | 5687 (Bolt) / 5474 (UI) | 그래프 DB |
-| Milvus | 5530 | 벡터 DB |
+| Neo4j | 5687 (Bolt) / 5474 (UI) | 그래프 DB (관계 탐색) |
+| Milvus | 5530 | 벡터 DB (검색 인덱스) |
+| **MariaDB** | **5306** | **Source of truth (노드 원본 데이터 + 시스템 설정)** |
 | Redis | 5379 | 쿼리 캐시 |
 | MinIO | 5001 (UI) | Milvus 오브젝트 스토리지 |
 | etcd | — (내부) | Milvus 메타데이터 |

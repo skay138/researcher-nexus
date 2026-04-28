@@ -30,8 +30,8 @@ VALID_NODE_TYPES: frozenset = frozenset({
 # Internal helpers
 # ────────────────────────────────────────────────────────────────────────────
 
-def _parse_hops(neo4j_hops: List[Dict[str, str]]) -> List[HopSpec]:
-    """hop dict 리스트 → HopSpec 리스트 변환. from_type/to_type 유효성 검증 포함."""
+def _parse_hops(neo4j_hops: List[Dict[str, str]], entry_node_type: str = "") -> List[HopSpec]:
+    """hop dict 리스트 → HopSpec 리스트 변환. from_type/to_type 유효성 및 연속성 검증 포함."""
     parsed: List[HopSpec] = []
     for i, hop_dict in enumerate(neo4j_hops):
         from_type = hop_dict.get("from_type", "")
@@ -46,6 +46,17 @@ def _parse_hops(neo4j_hops: List[Dict[str, str]]) -> List[HopSpec]:
             raise InvalidNodeType(
                 f"hop[{i}].to_type은 {sorted(VALID_NODE_TYPES)} 중 하나여야 합니다. "
                 f"입력값: {to_type!r}"
+            )
+
+        # 연속성 검증: hop[0].from_type은 entry와 일치해야 하고
+        # hop[i].from_type은 hop[i-1].to_type과 일치해야 함
+        expected = entry_node_type if i == 0 else parsed[i - 1].to_type
+        if expected and from_type != expected:
+            raise InvalidNodeType(
+                f"hop[{i}].from_type 불일치: "
+                f"{'entry' if i == 0 else f'hop[{i-1}].to_type'}은 {expected!r}인데 "
+                f"hop[{i}].from_type이 {from_type!r}입니다. "
+                f"플랜의 탐색 경로가 연결되지 않습니다."
             )
 
         dir_val = hop_dict.get("direction", "out").lower()
@@ -72,7 +83,14 @@ _PROTECTED_KEYS = frozenset({"id", "type", "name", "text", "path", "score"})
 def _format_results(results: List[NodeResult], stats: Any) -> str:
     """순수 JSON 반환. None 필드 제거로 토큰 낭비 방지."""
     if not results:
-        return json.dumps({"total": 0, "path": "", "results": []}, ensure_ascii=False)
+        payload: Dict[str, Any] = {"total": 0, "path": "", "results": []}
+        failed_hop = getattr(stats, "failed_hop", None)
+        entry_count = getattr(stats, "entry_count", 0)
+        if failed_hop:
+            payload["diagnostics"] = failed_hop
+        elif entry_count == 0:
+            payload["diagnostics"] = "Entry 벡터 검색 결과 없음 — vector_search_concept를 더 구체적으로 변경하세요."
+        return json.dumps(payload, ensure_ascii=False)
 
     items = []
     for r in results:
@@ -101,8 +119,8 @@ def _format_results(results: List[NodeResult], stats: Any) -> str:
 # Tool Factory
 # ────────────────────────────────────────────────────────────────────────────
 
-def make_semantic_tools(engine: ExecutionEngine) -> list:
-    """engine을 클로저로 캡처한 LangChain 도구 목록 반환."""
+def make_semantic_tools(engine: ExecutionEngine, fetch_details_fn) -> list:
+    """engine과 fetch_details_fn을 클로저로 캡처한 LangChain 도구 목록 반환."""
 
     @tool
     def execute_dynamic_search(
@@ -140,7 +158,7 @@ def make_semantic_tools(engine: ExecutionEngine) -> list:
         cfg = RequestConfig.current()
 
         try:
-            parsed_hops = _parse_hops(neo4j_hops)
+            parsed_hops = _parse_hops(neo4j_hops, entry_node_type=vector_search_node_type)
         except InvalidNodeType:
             raise
         except Exception as e:
@@ -178,14 +196,18 @@ def make_semantic_tools(engine: ExecutionEngine) -> list:
         return _format_results(results, stats)
 
     @tool
-    def get_node_by_ids(node_ids: List[str]) -> str:
+    def get_details_by_ids(node_ids: List[str]) -> str:
         """
-        이전 검색 결과에서 얻은 ID로 특정 노드들의 상세 정보를 직접 조회합니다.
-        벡터/그래프 탐색 없이 Neo4j에서 즉시 반환합니다.
-        후속 질문("이 논문의 저자를 모두 보여줘", "앞 결과 중 ID xxx의 상세 정보")에 사용하세요.
+        노드 ID 목록으로 MariaDB에서 상세 정보(초록, 저자, 키워드, 전체 설명)를 조회합니다.
+        execute_dynamic_search의 기본 정보만으로는 부족할 때 사용합니다.
+
+        사용 시점:
+        - 사용자가 논문·특허·보고서의 내용·초록을 요청한 경우
+        - 저자·발명자 목록이 필요한 경우
+        - 특정 ID의 상세 정보를 명시적으로 요청한 경우
 
         Args:
-            node_ids: 조회할 노드 ID 목록 (이전 검색 결과의 "id" 필드값)
+            node_ids: 조회할 노드 ID 목록 (검색 결과의 "id" 필드값)
         """
         if not node_ids:
             return json.dumps({"total": 0, "path": "", "results": []}, ensure_ascii=False)
@@ -193,7 +215,7 @@ def make_semantic_tools(engine: ExecutionEngine) -> list:
         cfg = RequestConfig.current()
 
         try:
-            results = engine.fetch_details_fn(node_ids[:cfg.max_results])
+            results = fetch_details_fn(node_ids[:cfg.max_results])
         except Exception as e:
             logger.error("[Tool] get_node_by_ids 실패: %s", e)
             raise ToolError(f"노드 조회 중 오류가 발생했습니다: {type(e).__name__}") from e
@@ -203,44 +225,5 @@ def make_semantic_tools(engine: ExecutionEngine) -> list:
 
         return _format_results(results, _DirectStats())
 
-    return [execute_dynamic_search, get_node_by_ids]
+    return [execute_dynamic_search, get_details_by_ids]
 
-
-# ────────────────────────────────────────────────────────────────────────────
-# Public API
-# ────────────────────────────────────────────────────────────────────────────
-
-def extract_sources_from_tool_results(tool_results: List[str]) -> List[dict]:
-    """ToolMessage 목록에서 출처 정보를 추출. 순수 JSON 포맷 기준."""
-    seen_ids: set = set()
-    sources: List[dict] = []
-
-    for raw in tool_results:
-        try:
-            data = json.loads(raw)
-        except (json.JSONDecodeError, TypeError):
-            continue
-
-        global_path = data.get("path", "")
-
-        for item in data.get("results", []):
-            item_id = item.get("id")
-            if not item_id or item_id in seen_ids:
-                continue
-            seen_ids.add(item_id)
-
-            source: Dict[str, Any] = {
-                "no":   len(sources) + 1,
-                "id":   item_id,
-                "type": item.get("type", "Unknown"),
-                "name": item.get("name", ""),
-                "path": item.get("path") or global_path,
-                "score": item.get("score"),
-            }
-            if "authors" in item:
-                source["authors"] = item["authors"]
-            if "year" in item:
-                source["year"] = item["year"]
-            sources.append(source)
-
-    return sources

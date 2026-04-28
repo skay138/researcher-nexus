@@ -15,8 +15,6 @@ from core.executor.beam_pruner import BeamPruner
 from core.executor.execution_engine import ExecutionEngine
 from common.utils.cache import make_cache
 from common.config.query_config import RequestConfig
-from infrastructure.config_repository import MemoryConfigRepository
-
 logger = logging.getLogger(__name__)
 
 
@@ -72,8 +70,16 @@ def _open_milvus(settings) -> object:
     return client
 
 
-def make_config_repo(overrides=None) -> MemoryConfigRepository:
-    """ConfigRepository 생성. 실제 RDB 연동 전까지 MemoryConfigRepository 사용."""
+def make_config_repo(settings=None, overrides=None):
+    """
+    ConfigRepository 생성.
+    - mariadb_url 설정 시 MariaDBConfigRepository (영속, 런타임 변경 가능)
+    - 미설정 시 MemoryConfigRepository (fallback)
+    """
+    if settings and getattr(settings, "mariadb_url", None):
+        from infrastructure.config_repository import MariaDBConfigRepository
+        return MariaDBConfigRepository(settings.mariadb_url, overrides)
+    from infrastructure.config_repository import MemoryConfigRepository
     return MemoryConfigRepository(overrides)
 
 
@@ -92,7 +98,7 @@ def create_engine(
         from common.config.settings import get_settings
         settings = get_settings()
 
-    repo = config_repo or make_config_repo()
+    repo = config_repo or make_config_repo(settings)
     beam_width = RequestConfig._resolve(repo).beam_width
 
     if neo4j_driver is None:
@@ -121,15 +127,12 @@ def create_engine(
         ttl=settings.cache_ttl_seconds,
     )
 
-    from infrastructure.neo4j import make_graph_query_fn, make_fetch_details_fn
-    from infrastructure.milvus import make_vector_search_fn
+    from infrastructure.neo4j import make_graph_query_fn
+    from infrastructure.milvus import make_vector_search_fn, make_vector_get_by_ids_fn
 
-    graph_fn   = make_graph_query_fn(neo4j_driver)
-    details_fn = make_fetch_details_fn(neo4j_driver)
-    vector_fn  = make_vector_search_fn(
-        milvus_client,
-        embedding_fn=_embedding_fn,
-    )
+    graph_fn          = make_graph_query_fn(neo4j_driver)
+    vector_fn         = make_vector_search_fn(milvus_client, embedding_fn=_embedding_fn)
+    get_by_ids_fn     = make_vector_get_by_ids_fn(milvus_client)
     logger.info("DB 연결 완료 (Neo4j + Milvus)")
 
     engine = ExecutionEngine(
@@ -137,14 +140,30 @@ def create_engine(
         pruner=pruner,
         vector_search_fn=vector_fn,
         graph_query_fn=graph_fn,
-        fetch_details_fn=details_fn,
+        vector_get_by_ids_fn=get_by_ids_fn,
         cache=cache,
     )
     return engine
 
 
+def make_fetch_details(settings, neo4j_driver=None) -> object:
+    """
+    fetch_details_fn 생성.
+    - mariadb_url 설정 시 MariaDB (source of truth)
+    - 미설정 시 Neo4j fallback (개발/임시)
+    """
+    if settings and getattr(settings, "mariadb_url", None):
+        from infrastructure.mariadb import make_fetch_details_fn
+        logger.info("fetch_details → MariaDB: %s", settings.mariadb_url.split("@")[-1])
+        return make_fetch_details_fn(settings.mariadb_url)
+    from infrastructure.neo4j import make_fetch_details_fn
+    logger.warning("fetch_details → Neo4j fallback (mariadb_url 미설정)")
+    return make_fetch_details_fn(neo4j_driver)
+
+
 def create_agent_graph(
     engine,
+    fetch_details_fn,
     config_repo,
     settings,
     checkpointer=None,
@@ -167,7 +186,7 @@ def create_agent_graph(
         base_url    = settings.llm_base_url,
     )
 
-    tools = make_semantic_tools(engine)
+    tools = make_semantic_tools(engine, fetch_details_fn)
 
     agent = build_graph(
         schema_registry=schema_registry,

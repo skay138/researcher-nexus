@@ -29,6 +29,50 @@ COLLECTION_NAME = "research_nodes"
 VECTOR_DIM = 768  # KR-SBERT-V40K-klueNLI-augSTS 출력 차원
 
 
+def make_vector_get_by_ids_fn(
+    client,
+    collection_name: str = COLLECTION_NAME,
+) -> Callable:
+    """
+    Milvus ID 직접 조회 콜백 생성.
+    인터페이스: (ids: List[str]) → List[NodeResult]
+    """
+    from common.types.results import NodeResult
+
+    def vector_get_by_ids(ids: List[str]) -> List[NodeResult]:
+        if not ids:
+            return []
+        t0 = time.perf_counter()
+        ids_expr = ", ".join(f'"{i}"' for i in ids)
+        try:
+            rows = client.query(
+                collection_name=collection_name,
+                filter=f"id in [{ids_expr}]",
+                output_fields=["id", "node_type", "name", "text", "year"],
+            )
+        except Exception as e:
+            logger.warning("[Milvus] vector_get_by_ids 실패: %s", e)
+            return []
+
+        node_map: dict = {}
+        for r in rows:
+            rid = r.get("id", "")
+            meta = {}
+            if r.get("year"):
+                meta["year"] = r["year"]
+            node_map[rid] = NodeResult(
+                id=rid,
+                type=r.get("node_type", "Unknown"),
+                name=r.get("name"),
+                text=r.get("text"),
+                meta=meta,
+            )
+        logger.debug("[Milvus] get_by_ids: %d nodes %.1f ms", len(node_map), (time.perf_counter() - t0) * 1000)
+        return [node_map[i] for i in ids if i in node_map]
+
+    return vector_get_by_ids
+
+
 def make_vector_search_fn(
     client,
     embedding_fn: Callable[[List[str]], Any],
@@ -148,6 +192,7 @@ def ensure_collection(client, collection_name: str = COLLECTION_NAME) -> None:
     schema = client.create_schema(auto_id=False, enable_dynamic_field=True)
     schema.add_field("id",        DataType.VARCHAR, max_length=64, is_primary=True)
     schema.add_field("node_type", DataType.VARCHAR, max_length=32)
+    schema.add_field("name",      DataType.VARCHAR, max_length=512)
     schema.add_field("year",      DataType.INT64)
     schema.add_field(
         "text", DataType.VARCHAR, max_length=65535,

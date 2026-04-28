@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     milvus_host: str = "localhost"
     milvus_port: int = 19530
 
+    # ── MariaDB (source of truth — 노드 원본 데이터 + config) ────────────────────
+    mariadb_url: str = "mysql+pymysql://nexus:nexus@localhost:5306/nexus"
+
     # ── Cache ──────────────────────────────────────────────────────────────────────────
     redis_url: str = "redis://localhost:5379"
     cache_ttl_seconds: float = 300.0
@@ -50,12 +53,14 @@ class Settings(BaseSettings):
             env_file=".env",
             env_file_encoding="utf-8",
             case_sensitive=False,
+            extra="ignore",
         )
     else:
         class Config:
             env_file = ".env"
             env_file_encoding = "utf-8"
             case_sensitive = False
+            extra = "ignore"
 
 
 # 싱글턴 인스턴스 (앱 전역 공유)

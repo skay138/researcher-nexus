@@ -135,7 +135,8 @@ class CypherCompiler:
             f"WHERE n0.id IN {self._ids_literal(start_ids)}\n"
             f"MATCH (n0){arrow_left}[:{rel_type}]{arrow_right}(n1:{hop.to_type})\n"
             f"{where_clause}\n"
-            f"RETURN DISTINCT n1.id AS id, labels(n1)[0] AS type, n1.name AS name, n0.id AS start_id\n"
+            f"RETURN DISTINCT n1.id AS id, labels(n1)[0] AS type, n1.name AS name, "
+            f"n0.id AS start_id, n0.name AS start_name\n"
             f"LIMIT {limit}"
         )
 

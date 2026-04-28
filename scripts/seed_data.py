@@ -1,9 +1,10 @@
 """
-데이터 시드 스크립트 — Neo4j + Milvus에 샘플 데이터 적재
+데이터 시드 스크립트 — Neo4j + Milvus + MariaDB에 샘플 데이터 적재
 사용법:
     python scripts/seed_data.py
     python scripts/seed_data.py --neo4j-only
     python scripts/seed_data.py --milvus-only
+    python scripts/seed_data.py --mariadb-only
     python scripts/seed_data.py --clear   # 기존 데이터 삭제 후 재적재
 """
 
@@ -17,8 +18,8 @@ import os
 root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(root_dir, "src"))
 
-from common.settings import get_settings
-from common.fixtures import SEED_NODES, SEED_RELATIONS
+from common.config.settings import get_settings
+from common.utils.fixtures import SEED_NODES, SEED_RELATIONS
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -41,10 +42,10 @@ def seed_neo4j(driver, clear: bool = False) -> None:
                 f"CREATE CONSTRAINT IF NOT EXISTS FOR (n:{label}) REQUIRE n.id IS UNIQUE"
             )
 
-        # 노드 생성
+        # 노드 생성 (Neo4j는 관계 탐색 전용 — id + name만 저장, 상세 데이터는 MariaDB)
         for node_id, props in SEED_NODES.items():
             label = props["type"]
-            node_props = {k: v for k, v in props.items() if k != "type"}
+            node_props = {"name": props.get("name", "")}
             session.run(
                 f"MERGE (n:{label} {{id: $id}}) SET n += $props",
                 id=node_id, props=node_props,
@@ -83,27 +84,28 @@ def seed_milvus(client, embedding_fn, clear: bool = False) -> None:
 
     # 임베딩 생성
     # name을 앞에 배치: 짧은 쿼리와의 유사도 향상 (bi-encoder 특성상 title이 검색 신호에 더 강함)
-    ids, texts, node_types, years = [], [], [], []
+    ids, texts, node_types, years, names = [], [], [], [], []
     for node_id, props in SEED_NODES.items():
         name = props.get("name", "")
         body = (props.get("text") or props.get("abstract")
                 or props.get("summary") or "")
         extra = " ".join(str(props.get(k, "")) for k in
-                         ("topic", "expertise", "keywords") if props.get(k))
+                         ("topic", "expertise", "keywords", "report_type") if props.get(k))
         full_text = " ".join(filter(None, [name, body, extra]))
 
         ids.append(node_id)
         texts.append(full_text)
         node_types.append(props["type"])
         years.append(props.get("year") or 0)
+        names.append(name)
 
     logger.info("임베딩 생성 중 (%d개)...", len(texts))
     vectors = embedding_fn(texts)
 
     # text 필드: BM25 전문검색용 원본 텍스트 (sparse 벡터는 Milvus가 자동 생성)
     data = [
-        {"id": nid, "node_type": nt, "year": yr, "text": txt, "dense": vec.tolist()}
-        for nid, nt, yr, txt, vec in zip(ids, node_types, years, texts, vectors)
+        {"id": nid, "node_type": nt, "name": nm, "year": yr, "text": txt, "dense": vec.tolist()}
+        for nid, nt, nm, yr, txt, vec in zip(ids, node_types, names, years, texts, vectors)
     ]
     client.insert(collection_name=COLLECTION_NAME, data=data)
     client.flush(collection_name=COLLECTION_NAME)
@@ -112,19 +114,38 @@ def seed_milvus(client, embedding_fn, clear: bool = False) -> None:
 
 
 # ────────────────────────────────────────────────────────────────────────────
+# MariaDB 시드
+# ────────────────────────────────────────────────────────────────────────────
+
+def seed_mariadb(mariadb_url: str, clear: bool = False) -> None:
+    from infrastructure.mariadb import ensure_schema, seed_nodes
+
+    logger.info("MariaDB 시드 시작 (clear=%s)", clear)
+    ensure_schema(mariadb_url)
+    seed_nodes(mariadb_url, SEED_NODES, SEED_RELATIONS, clear=clear)
+    logger.info("MariaDB 시드 완료")
+
+
+# ────────────────────────────────────────────────────────────────────────────
 # Main
 # ────────────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="샘플 데이터를 Neo4j/Milvus에 적재")
-    parser.add_argument("--neo4j-only", action="store_true")
-    parser.add_argument("--milvus-only", action="store_true")
+    parser = argparse.ArgumentParser(description="샘플 데이터를 Neo4j / Milvus / MariaDB에 적재")
+    parser.add_argument("--neo4j-only",   action="store_true")
+    parser.add_argument("--milvus-only",  action="store_true")
+    parser.add_argument("--mariadb-only", action="store_true")
     parser.add_argument("--clear", action="store_true", help="기존 데이터 삭제 후 재적재")
     args = parser.parse_args()
 
     settings = get_settings()
-    do_neo4j  = not args.milvus_only
-    do_milvus = not args.neo4j_only
+
+    # 특정 DB만 지정하면 그것만, 아니면 전체
+    only_flags = [args.neo4j_only, args.milvus_only, args.mariadb_only]
+    any_only = any(only_flags)
+    do_neo4j   = args.neo4j_only   or not any_only
+    do_milvus  = args.milvus_only  or not any_only
+    do_mariadb = args.mariadb_only or not any_only
 
     if do_neo4j:
         try:
@@ -138,7 +159,7 @@ def main() -> None:
             driver.close()
         except Exception as e:
             logger.error("Neo4j 시드 실패: %s", e)
-            if not do_milvus:
+            if not (do_milvus or do_mariadb):
                 sys.exit(1)
 
     if do_milvus:
@@ -151,6 +172,14 @@ def main() -> None:
             seed_milvus(client, embedder.encode, clear=args.clear)
         except Exception as e:
             logger.error("Milvus 시드 실패: %s", e)
+            if not do_mariadb:
+                sys.exit(1)
+
+    if do_mariadb:
+        try:
+            seed_mariadb(settings.mariadb_url, clear=args.clear)
+        except Exception as e:
+            logger.error("MariaDB 시드 실패: %s", e)
             sys.exit(1)
 
 

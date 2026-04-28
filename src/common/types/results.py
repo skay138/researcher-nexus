@@ -39,6 +39,8 @@ class ExecutionStats:
     db_calls:           int               = 0
     pruned_total:       int               = 0
     layer_timings:      List[LayerTiming] = field(default_factory=list)
+    entry_count:        int               = 0   # 진입점 벡터 검색 결과 수
+    failed_hop:         Optional[str]     = None  # 0 rows hop 진단 메시지
 
     def timing_summary(self) -> str:
         if not self.layer_timings:

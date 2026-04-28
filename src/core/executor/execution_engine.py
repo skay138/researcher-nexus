@@ -59,25 +59,25 @@ class ExecutionEngine:
     QueryPlan 실행기.
 
     외부 DB는 콜백(callable)으로 주입받아 테스트 용이성 확보:
-      - vector_search_fn:   (query, node_type, filters, top_k) → List[tuple[str, float]]
-      - graph_query_fn:     (cypher_query) → List[dict]  (각 dict에 id, start_id, name 포함)
-      - fetch_details_fn:   (ids) → List[NodeResult]
+      - vector_search_fn:      (query, node_type, filters, top_k) → List[tuple[str, float]]
+      - graph_query_fn:        (cypher_query) → List[dict]  (각 dict에 id, start_id, name 포함)
+      - vector_get_by_ids_fn:  (ids) → List[NodeResult]  Milvus 기본 필드 조회
     """
 
     def __init__(
         self,
-        compiler:         CypherCompiler,
-        pruner:           BeamPruner,
-        vector_search_fn: Callable,
-        graph_query_fn:   Callable,
-        fetch_details_fn: Callable,
-        cache:            Optional[CacheBackend] = None,
+        compiler:              CypherCompiler,
+        pruner:                BeamPruner,
+        vector_search_fn:      Callable,
+        graph_query_fn:        Callable,
+        vector_get_by_ids_fn:  Callable,
+        cache:                 Optional[CacheBackend] = None,
     ):
-        self.compiler         = compiler
-        self.pruner           = pruner
-        self.vector_search_fn = vector_search_fn
-        self.graph_query_fn   = graph_query_fn
-        self.fetch_details_fn = fetch_details_fn
+        self.compiler              = compiler
+        self.pruner                = pruner
+        self.vector_search_fn      = vector_search_fn
+        self.graph_query_fn        = graph_query_fn
+        self.vector_get_by_ids_fn  = vector_get_by_ids_fn
         self._cache: CacheBackend = cache if cache is not None else _NullCache()  # type: ignore[assignment]
 
     # ------------------------------------------------------------------ #
@@ -109,12 +109,14 @@ class ExecutionEngine:
         stats = ExecutionStats()
         t_start = time.time()
 
-        logger.info("ExecutionEngine.run()\n%s", plan.describe())
+        # logger.info("ExecutionEngine.run()\n%s", plan.describe())
 
         # Step 1 & 2: Vector DB 진입 및 그래프 탐색
         # 개별 노드별 도달 경로(Provenance) 및 점수 추적용 맵
         provenance: Dict[str, str] = {}
         scores_map: Dict[str, float] = {}
+        # 그래프 탐색 중 발견한 저자/소속 등 역매핑용 (id -> {field: set})
+        meta_enrich: Dict[str, Dict[str, set]] = {}
         
         entry_ids, entry_scores = self._run_entry_search(
             plan.entry_search, stats, provenance,
@@ -122,6 +124,8 @@ class ExecutionEngine:
             score_ratio=entry_score_ratio,
         )
         scores_map.update(entry_scores)
+
+        stats.entry_count = len(entry_ids)
 
         if not entry_ids:
             logger.warning("Entry search returned no results.")
@@ -139,11 +143,17 @@ class ExecutionEngine:
                 parent_scores=scores_map,
                 exclude_ids=list(traversal_history_ids),
                 provenance=provenance,
+                meta_enrich=meta_enrich,
                 beam_width=beam_width,
             )
             scores_map.update(hop_scores)
             if not current_ids:
                 logger.warning("Hop %d returned no results, stopping.", hop_idx)
+                stats.failed_hop = (
+                    f"Entry {stats.entry_count}건 찾음. "
+                    f"Hop {hop_idx + 1} ({hop.relation_concept} → {hop.to_type}): 0 rows — "
+                    f"direction 또는 relation_concept 확인 필요"
+                )
                 break
             traversal_history_ids.update(current_ids)
 
@@ -154,14 +164,18 @@ class ExecutionEngine:
             )
             scores_map.update(filter_scores)
 
-        # Step 4: 점수 내림차순 정렬 후 상세 정보 로드
+        # Step 4: 점수 내림차순 정렬 후 Milvus 기본 정보 로드
         sorted_ids = sorted(current_ids, key=lambda nid: scores_map.get(nid, 0.0), reverse=True)
-        results = self._fetch_details(sorted_ids[:max_results], stats)
+        results = self._enrich_from_vector_db(sorted_ids[:max_results], stats)
 
         # 각 결과물에 추적된 개별 경로 및 점수 주입
         for r in results:
             r.path = provenance.get(r.id, stats.path_summary)
             r.meta["score"] = round(scores_map.get(r.id, 0.0), 3)
+            # 그래프에서 수집된 정보가 있으면 병합 (set -> list)
+            if r.id in meta_enrich:
+                for key, val_set in meta_enrich[r.id].items():
+                    r.meta[key] = sorted(list(val_set))
 
         stats.total_elapsed_s = time.time() - t_start
         logger.info(
@@ -225,7 +239,7 @@ class ExecutionEngine:
 
         path_seg = f"시작({entry.node_type}: '{entry.concept}')"
         if ids:
-            sample_nodes = self.fetch_details_fn(ids)
+            sample_nodes = self.vector_get_by_ids_fn(ids)
             if sample_nodes:
                 path_seg += f"['{_clean(sample_nodes[0].name or sample_nodes[0].id)}']"
 
@@ -250,6 +264,7 @@ class ExecutionEngine:
         parent_scores: Dict[str, float],
         exclude_ids:   Optional[List[str]] = None,
         provenance:    Optional[Dict[str, str]] = None,
+        meta_enrich:   Optional[Dict[str, Dict[str, set]]] = None,
         beam_width:    Optional[int] = None,
     ) -> tuple[List[str], Dict[str, float]]:
         cache_key = make_cache_key(
@@ -315,10 +330,15 @@ class ExecutionEngine:
                 continue
 
             p_id = r_node.get("start_id")
+            p_name = _clean(r_node.get("start_name") or p_id)
             name = _clean(r_node.get("name") or rid)
 
             if provenance is not None and p_id and p_id in provenance:
                 provenance[rid] = provenance[p_id] + f" -[{hop.relation_concept}]-> {hop.to_type}('{name}')"
+
+            # 저자 정보 매핑 (Researcher -> Paper/Patent/Report)
+            if meta_enrich is not None and p_name and hop.to_type in ("Paper", "Patent", "Report") and hop.from_type == "Researcher":
+                meta_enrich.setdefault(rid, {}).setdefault("authors", set()).add(p_name)
 
             if not first_found and rid in result_ids[:3]:
                 path_seg += f"('{name}')"
@@ -361,13 +381,13 @@ class ExecutionEngine:
         )
         return result, filter_scores
 
-    def _fetch_details(
+    def _enrich_from_vector_db(
         self, ids: List[str], stats: ExecutionStats
     ) -> List[NodeResult]:
         if not ids:
             return []
-        with _timed(stats, "L4 | Neo4j   fetch_details", count=len(ids)):
-            results = self.fetch_details_fn(ids)
+        with _timed(stats, "L4 | Milvus  get_by_ids", count=len(ids)):
+            results = self.vector_get_by_ids_fn(ids)
         stats.db_calls += 1
         return results
 

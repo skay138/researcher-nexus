@@ -36,31 +36,31 @@ class SchemaRegistry:
     """
 
     # 추상 개념 → 실제 relation type 매핑
-    # 실제 환경에서는 DB나 설정 파일에서 로드
     CONCEPT_MAPPING: Dict[str, str] = {
-        # Project ↔ Researcher
+        # Researcher → Project
         "participation":    "PARTICIPATED_IN",
         "member":           "PARTICIPATED_IN",
-        # Researcher ↔ Organization
+        # Researcher → Organization
         "belongs_to":       "AFFILIATED_WITH",
         "affiliation":      "AFFILIATED_WITH",
         "affiliated_with":  "AFFILIATED_WITH",
-        # Researcher ↔ Paper
+        # Researcher → Paper
         "authored":         "AUTHORED",
         "wrote":            "AUTHORED",
-        # Paper ↔ Paper
+        # Paper → Paper
         "cites":            "CITES",
         "referenced":       "CITES",
         # Researcher → Project
         "manages":          "MANAGES",
-        # Researcher ↔ Researcher
+        # Researcher → Researcher
         "supervised":       "SUPERVISED_BY",
-        # ── Patent (신규) ───────────────────────────────────────────────
+        # Researcher → Patent
         "invented":         "INVENTED",
         "invention":        "INVENTED",
+        # Organization → Patent
         "filed":            "FILED",
         "patent_filing":    "FILED",
-        # Project → Patent / Report
+        # Organization → Project
         "produced":         "PRODUCED",
         "produced_output":  "PRODUCED",
         # Researcher → Report
@@ -74,6 +74,24 @@ class SchemaRegistry:
         # Paper → Patent
         "cited_in":         "CITED_IN",
         "cited_in_patent":  "CITED_IN",
+    }
+
+    # relation type → (from_label, to_label) 방향 정보
+    # LLM에게 방향을 명시적으로 알려주기 위한 테이블
+    RELATION_DIRECTIONS: Dict[str, tuple] = {
+        "PARTICIPATED_IN":  ("Researcher",   "Project"),
+        "AFFILIATED_WITH":  ("Researcher",   "Organization"),
+        "AUTHORED":         ("Researcher",   "Paper"),
+        "CITES":            ("Paper",        "Paper"),
+        "MANAGES":          ("Researcher",   "Project"),
+        "SUPERVISED_BY":    ("Researcher",   "Researcher"),
+        "INVENTED":         ("Researcher",   "Patent"),
+        "FILED":            ("Organization", "Patent"),
+        "PRODUCED":         ("Organization", "Project"),
+        "AUTHORED_REPORT":  ("Researcher",   "Report"),
+        "PUBLISHED":        ("Organization", "Report"),
+        "PUBLISHED_IN":     ("Project",      "Report"),
+        "CITED_IN":         ("Paper",        "Patent"),
     }
 
     def __init__(self, driver=None):
@@ -168,7 +186,7 @@ class SchemaRegistry:
             return self._mock_schema()
 
     def _query_neo4j_schema(self) -> str:
-        """실제 Neo4j에서 스키마 조회"""
+        """실제 Neo4j에서 스키마 조회 (방향 포함)"""
         with self.driver.session() as session:
             # 노드 타입과 속성 조회
             node_result = session.run("""
@@ -178,28 +196,45 @@ class SchemaRegistry:
             """)
             nodes = {r["nodeType"]: r["properties"] for r in node_result}
 
-            # relation 타입 조회
+            # relation 방향 포함 조회
             rel_result = session.run("""
-                CALL db.schema.relTypeProperties()
-                YIELD relType
-                RETURN DISTINCT relType
+                MATCH (a)-[r]->(b)
+                RETURN DISTINCT
+                    labels(a)[0] AS from_label,
+                    type(r)      AS rel_type,
+                    labels(b)[0] AS to_label
+                LIMIT 200
             """)
-            relations = [r["relType"] for r in rel_result]
+            directions: Dict[str, tuple] = {
+                r["rel_type"]: (r["from_label"], r["to_label"])
+                for r in rel_result
+            }
+            # 알려진 방향 테이블로 보완
+            for rel_type, direction in self.RELATION_DIRECTIONS.items():
+                directions.setdefault(rel_type, direction)
 
-        return self._format_schema(nodes, relations)
+        return self._format_schema(nodes, directions)
 
     def _format_schema(
         self,
         nodes: Dict[str, List[str]],
-        relations: List[str],
+        directions: Dict[str, tuple],
     ) -> str:
         node_lines = "\n".join(
             f"  - {label}: {', '.join(props[:5])}"
             for label, props in nodes.items()
         )
-        rel_lines = "\n".join(f"  - {r}" for r in relations)
+
+        # 방향 포함 relation 표기: (From)-[REL]->(To)
+        rel_lines = "\n".join(
+            f"  ({fr})-[{rtype}]->({to})"
+            for rtype, (fr, to) in sorted(directions.items())
+        )
+
+        # 개념 매핑에도 방향 표시
         concept_lines = "\n".join(
-            f"  '{concept}' → {rtype}"
+            f"  '{concept}' → {rtype}  "
+            f"({'→'.join(directions[rtype]) if rtype in directions else '?'})"
             for concept, rtype in self.CONCEPT_MAPPING.items()
         )
 
@@ -208,10 +243,11 @@ class SchemaRegistry:
 ### 노드 타입
 {node_lines}
 
-### Relation 타입
+### Relation 타입 (방향: From → To)
 {rel_lines}
 
-### 추상 개념 → Relation 매핑 (이 개념만 사용하세요)
+### 추상 개념 → Relation 매핑
+※ direction="out": From→To 순방향 / direction="in": To←From 역방향 탐색
 {concept_lines}
 """
 

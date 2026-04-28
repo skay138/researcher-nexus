@@ -18,15 +18,16 @@ def make_in_memory_adapters(
     keyword_threshold: float = 1.0,
 ) -> Tuple:
     """
-    인메모리 어댑터 3종을 생성하여 튜플로 반환.
+    인메모리 어댑터 4종을 생성하여 튜플로 반환.
 
     Returns:
-        (vector_search_fn, graph_query_fn, fetch_details_fn)
+        (vector_search_fn, graph_query_fn, vector_get_by_ids_fn, fetch_details_fn)
     """
-    vector_fn  = _make_vector_search(nodes, keyword_threshold)
-    graph_fn   = _make_graph_query(nodes, relations)
-    details_fn = _make_fetch_details(nodes, relations)
-    return vector_fn, graph_fn, details_fn
+    vector_fn          = _make_vector_search(nodes, keyword_threshold)
+    graph_fn           = _make_graph_query(nodes, relations)
+    get_by_ids_fn      = _make_vector_get_by_ids(nodes)
+    fetch_details_fn   = _make_fetch_details(nodes, relations)
+    return vector_fn, graph_fn, get_by_ids_fn, fetch_details_fn
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -139,6 +140,28 @@ def _make_graph_query(nodes: Dict[str, Dict], relations: Dict[str, List[Dict]]):
         return deduped[:limit]
 
     return graph_query
+
+
+def _make_vector_get_by_ids(nodes: Dict[str, Dict]):
+    """기본 필드만 반환 (authors 제외). ExecutionEngine.vector_get_by_ids_fn 용."""
+    def vector_get_by_ids(ids: List[str]) -> List[NodeResult]:
+        results = []
+        for nid in ids:
+            node = nodes.get(nid)
+            if node:
+                text = node.get("text") or node.get("abstract") or node.get("summary")
+                meta = {}
+                if node.get("year"):
+                    meta["year"] = node["year"]
+                results.append(NodeResult(
+                    id=node["id"],
+                    type=node["type"],
+                    name=node.get("name"),
+                    text=text,
+                    meta=meta,
+                ))
+        return results
+    return vector_get_by_ids
 
 
 def _make_fetch_details(nodes: Dict[str, Dict], relations: Dict[str, List[Dict]]):

@@ -98,12 +98,13 @@ async def _stream_agent(
     max_tool_calls = (query_config.max_tool_calls if query_config and query_config.max_tool_calls else 3)
 
     initial_state = {
-        "messages":        [HumanMessage(content=body.query)],
-        "tool_call_count": 0,
-        "total_db_calls":  0,
-        "session_id":      body.session_id,
-        "start_time":      time.time(),
-        "max_tool_calls":  max_tool_calls,
+        "messages":          [HumanMessage(content=body.query)],
+        "tool_call_count":   0,
+        "empty_result_count": 0,
+        "total_db_calls":    0,
+        "session_id":        body.session_id,
+        "start_time":        time.time(),
+        "max_tool_calls":    max_tool_calls,
     }
     run_config = {
         "configurable": {"thread_id": body.session_id},
@@ -117,11 +118,11 @@ async def _stream_agent(
             initial_state, config=run_config, stream_mode="messages"
         ):
             node = metadata.get("langgraph_node")
-            if node not in ["Planner", "Agent"]:
+            if node not in ["Planner", "DetailEnricher", "Agent"]:
                 continue
 
-            # Planner: 도구 호출 추출
-            if node == "Planner":
+            # Planner / DetailEnricher: 도구 호출 추출
+            if node in ("Planner", "DetailEnricher"):
                 for tc in (getattr(msg_chunk, "tool_calls", None) or []):
                     if tc.get("name"):
                         yield json.dumps({
@@ -129,7 +130,7 @@ async def _stream_agent(
                             "tool": tc["name"],
                             "args": list((tc.get("args") or {}).keys()),
                         }, ensure_ascii=False)
-                continue  # Planner의 텍스트("DONE")은 버림
+                continue  # 텍스트("DONE") 버림
 
             # Agent: 텍스트 토큰 스트리밍
             if node == "Agent":
@@ -145,7 +146,7 @@ async def _stream_agent(
         all_messages = current_state.values.get("messages", [])
         
         from langchain_core.messages import ToolMessage
-        from services.semantic_tools import extract_sources_from_tool_results
+        from services.tool_result import extract_sources_from_tool_results
         
         all_tool_contents = [
             m.content for m in all_messages 

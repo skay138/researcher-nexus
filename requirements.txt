@@ -20,10 +20,10 @@ python-json-logger>=2.0        # JSON 구조화 로깅 (신규)
 redis>=5.0                     # 선택적 Redis 캐시 (CACHE_BACKEND=redis 시) (신규)
 langgraph-checkpoint-redis>=0.0.4  # LangGraph RedisSaver 체크포인터
 
-# ── DB (선택) ─────────────────────────────────────────────────────────────────
-neo4j>=5.0                     # Graph DB
-pymilvus>=2.3                  # Vector DB
-psycopg2-binary>=2.9           # PostgreSQL (RDB)
+# ── DB ────────────────────────────────────────────────────────────────────────
+neo4j>=5.0                     # Graph DB (관계 전용)
+pymilvus>=2.3                  # Vector DB (검색 인덱스)
+PyMySQL>=1.1                   # MariaDB (source of truth — 노드 원본 + config)
 
 # ── Semantic Pruning (선택, 없으면 truncate fallback) ─────────────────────────
 sentence-transformers>=2.2

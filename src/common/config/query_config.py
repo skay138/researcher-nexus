@@ -13,6 +13,19 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, ClassVar, Dict, Optional, Protocol, runtime_checkable
 
+# 단일 기본값 출처 — config_repository.py 와 RequestConfig 모두 여기서 참조
+CONFIG_DEFAULTS: Dict[str, Any] = {
+    "beam_width":        50,
+    "max_results":       20,
+    "sparse_weight":     0.3,
+    "dense_weight":      1.0,
+    "entry_min_score":   0.19,
+    "entry_score_ratio": 0.5,
+    "model":             "qwen2.5:14b",
+    "temperature":       0.0,
+    "max_tool_calls":    3,
+}
+
 
 @dataclass
 class QueryConfig:
@@ -73,18 +86,7 @@ class RequestConfig:
         - original_query → _get_original_query(messages) (messages가 source of truth)
     """
 
-    # config_repository 기본값과 동기화 유지
-    _DEFAULTS: ClassVar[Dict[str, Any]] = {
-        "beam_width":        50,
-        "max_results":       20,
-        "sparse_weight":     0.3,
-        "dense_weight":      1.0,
-        "entry_min_score":   0.2,
-        "entry_score_ratio": 0.5,
-        "model":             "qwen2.5:14b",
-        "temperature":       0.0,
-        "max_tool_calls":    3,
-    }
+    _DEFAULTS: ClassVar[Dict[str, Any]] = CONFIG_DEFAULTS
 
     _ctx: ClassVar[ContextVar[Optional["RequestConfig"]]] = ContextVar(
         "_request_config_ctx", default=None
