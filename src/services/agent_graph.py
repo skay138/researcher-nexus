@@ -229,11 +229,11 @@ def build_planner_prompt(schema_registry: SchemaRegistry) -> str:
 - 나쁜 예: "논문", "연구자", "최신" (너무 광범위)
 
 **홉 설계**: 탐색 경로를 관계 단위로 분해한다. 홉 없으면 `neo4j_hops: []`.
-`final_vector_filter_concept`: 최종 노드를 주제로 좁힐 때만 사용한다 (노드 타입명 제외).
+- 홉이 있으면 **마지막 홉의 `to_type`이 최종 반환 결과 타입**이다. 사용자가 원하는 노드 타입이 마지막 홉의 `to_type`이 되도록 경로를 설계한다.
+- `relation_concept`은 아래 [사용 가능한 스키마]에 있는 관계명(또는 그 의미적 유사어)만 사용한다.
+- `final_vector_filter_concept`: 최종 노드를 주제로 좁힐 때만 사용한다 (노드 타입명 제외).
 
-**재호출**: 빈 결과 시 **1회만** 재시도한다.
-- entry 0건 → `vector_search_concept` 변경
-- hop 0 rows → 스키마 방향 재확인 후 `direction` 수정
+**재호출**: 빈 결과(diagnostics 필드 확인) 시 **1회만** 파라미터를 조정하여 재시도한다. 직전과 동일한 플랜을 반복하지 않는다.
 
 ## 관계 방향 (direction)
 

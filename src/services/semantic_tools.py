@@ -149,18 +149,22 @@ def make_semantic_tools(engine: ExecutionEngine, fetch_details_fn) -> list:
             max_results: 반환할 최대 결과 수 (기본 20). 실제 상한은 서버 설정을 따릅니다.
         """
         if vector_search_node_type not in VALID_NODE_TYPES:
-            raise InvalidNodeType(
-                f"vector_search_node_type은 {sorted(VALID_NODE_TYPES)} 중 하나여야 합니다. "
-                f"입력값: {vector_search_node_type!r}"
-            )
+            return json.dumps({
+                "total": 0, "path": "", "results": [],
+                "diagnostics": f"vector_search_node_type 오류: {vector_search_node_type!r}은 유효하지 않습니다. "
+                               f"허용값: {sorted(VALID_NODE_TYPES)}",
+            }, ensure_ascii=False)
         max_results = max(1, max_results)
 
         cfg = RequestConfig.current()
 
         try:
             parsed_hops = _parse_hops(neo4j_hops, entry_node_type=vector_search_node_type)
-        except InvalidNodeType:
-            raise
+        except InvalidNodeType as e:
+            return json.dumps({
+                "total": 0, "path": "", "results": [],
+                "diagnostics": f"플랜 오류 — {e}",
+            }, ensure_ascii=False)
         except Exception as e:
             raise ToolError(f"neo4j_hops 파싱 실패: {e}") from e
 

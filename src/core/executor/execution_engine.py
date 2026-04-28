@@ -151,8 +151,7 @@ class ExecutionEngine:
                 logger.warning("Hop %d returned no results, stopping.", hop_idx)
                 stats.failed_hop = (
                     f"Entry {stats.entry_count}건 찾음. "
-                    f"Hop {hop_idx + 1} ({hop.relation_concept} → {hop.to_type}): 0 rows — "
-                    f"direction 또는 relation_concept 확인 필요"
+                    f"Hop {hop_idx + 1} (relation_concept='{hop.relation_concept}', to_type='{hop.to_type}'): 0 rows."
                 )
                 break
             traversal_history_ids.update(current_ids)
