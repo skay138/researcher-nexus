@@ -145,15 +145,18 @@ async def _stream_agent(
         current_state = await agent_app.aget_state(run_config)
         all_messages = current_state.values.get("messages", [])
         
-        from langchain_core.messages import ToolMessage
+        from langchain_core.messages import ToolMessage, HumanMessage
         from services.tool_result import extract_sources_from_tool_results
-        
-        all_tool_contents = [
-            m.content for m in all_messages 
+
+        # 현재 턴(마지막 HumanMessage 이후)의 ToolMessage만 sources로 사용
+        human_positions = [i for i, m in enumerate(all_messages) if isinstance(m, HumanMessage)]
+        turn_start = human_positions[-1] if human_positions else 0
+        current_tool_contents = [
+            m.content for m in all_messages[turn_start:]
             if isinstance(m, ToolMessage) and isinstance(m.content, str)
         ]
-        
-        sources = extract_sources_from_tool_results(all_tool_contents)
+
+        sources = extract_sources_from_tool_results(current_tool_contents)
 
         yield json.dumps({
             "type": "done",

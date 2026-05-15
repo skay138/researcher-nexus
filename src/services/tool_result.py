@@ -38,25 +38,36 @@ def merge_tool_results(
             if not item_id:
                 continue
 
+            itype = item.get("type", "Unknown")
+
             if item_id not in merged:
+                # authors: 논문·특허·보고서만 / researchers: 기관만 — 타입 무관 기본값 방지
                 merged[item_id] = {
-                    "id":        item_id,
-                    "type":      item.get("type", "Unknown"),
-                    "name":      item.get("name", ""),
-                    "path":      item.get("path") or global_path,
-                    "score":     item.get("score"),
-                    "year":      item.get("year", ""),
-                    "text":      item.get("text", ""),
-                    "authors":   item.get("authors") or [],
-                    "expertise": item.get("expertise", ""),
-                    "topic":     item.get("topic", ""),
+                    "id":          item_id,
+                    "type":        itype,
+                    "name":        item.get("name", ""),
+                    "path":        item.get("path") or global_path,
+                    "score":       item.get("score"),
+                    "year":        item.get("year", ""),
+                    "text":        item.get("text", ""),
+                    "authors":     item.get("authors") or [] if itype in ("Paper", "Patent", "Report") else None,
+                    "researchers": item.get("researchers") or [] if itype == "Organization" else None,
+                    "expertise":   item.get("expertise", ""),
+                    "topic":       item.get("topic", ""),
                 }
                 order.append(item_id)
             else:
-                for key in ("authors", "year", "text", "expertise", "topic"):
+                # 스칼라 필드: MariaDB 보강값으로 덮어씀
+                for key in ("year", "text", "expertise", "topic"):
                     val = item.get(key)
-                    if val is not None and val != "" and val != []:
+                    if val is not None and val != "":
                         merged[item_id][key] = val
+                # 리스트 필드: union (덮어쓰기 금지)
+                for key in ("authors", "researchers"):
+                    val = item.get(key)
+                    if val:
+                        existing = merged[item_id].get(key) or []
+                        merged[item_id][key] = sorted(set(existing) | set(val))
 
     return order, merged
 
@@ -77,20 +88,28 @@ def numbered_search_context(tool_results: List[str]) -> str:
         itype   = item["type"]
         authors = item["authors"]
 
-        lines.append(f"[{counter}] ({itype}) {item['name']}")
+        score_str = f"  score={item['score']}" if item.get("score") is not None else ""
+        lines.append(f"[{counter}] ({itype}) {item['name']}{score_str}")
         lines.append(f"  id: {item_id}")
-        if authors:
-            lines.append(f"  저자: {', '.join(authors)}")
-        elif itype in ("Paper", "Patent", "Report"):
-            lines.append("  저자: 저자 정보 없음")
+        # 타입별 필드만 출력 — 해당 없는 타입에 "정보 없음" 표기 금지
+        authors = item.get("authors") or []
+        if itype in ("Paper", "Patent", "Report"):
+            if authors:
+                lines.append(f"  저자: {', '.join(authors)}")
+        researchers = item.get("researchers") or []
+        if itype == "Organization" and researchers:
+            lines.append(f"  참여 연구자: {', '.join(researchers)}")
         if item["year"]:
             lines.append(f"  연도: {item['year']}")
         if itype == "Researcher":
-            lines.append(f"  전문분야: {item['expertise'] or '정보 없음'}")
+            if item["expertise"]:
+                lines.append(f"  전문분야: {item['expertise']}")
             if item["topic"]:
                 lines.append(f"  주제: {item['topic']}")
         if item["text"]:
             lines.append(f"  요약: {item['text']}")
+        if item.get("path"):
+            lines.append(f"  탐색경로: {item['path']}")
         lines.append("")
 
     return "\n".join(lines) if lines else "(검색 결과 없음)"

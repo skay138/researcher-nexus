@@ -145,7 +145,7 @@ def make_vector_search_fn(
             results = client.hybrid_search(
                 collection_name=collection_name,
                 reqs=[dense_req, sparse_req],
-                ranker=WeightedRanker(sparse_weight, dense_weight),
+                ranker=WeightedRanker(dense_weight, sparse_weight),
                 limit=top_k,
                 output_fields=["id"],
             )

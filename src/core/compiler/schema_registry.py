@@ -262,10 +262,5 @@ class SchemaRegistry:
                 "Patent":       ["id", "name", "patent_number", "year", "filing_date", "abstract"],
                 "Report":       ["id", "name", "report_type", "year", "summary"],
             },
-            relations=[
-                "PARTICIPATED_IN", "AFFILIATED_WITH", "AUTHORED",
-                "CITES", "MANAGES", "SUPERVISED_BY",
-                "INVENTED", "FILED", "PRODUCED",
-                "AUTHORED_REPORT", "PUBLISHED", "PUBLISHED_IN", "CITED_IN",
-            ],
+            directions=self.RELATION_DIRECTIONS,
         )

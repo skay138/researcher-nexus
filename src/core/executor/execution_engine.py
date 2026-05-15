@@ -214,8 +214,10 @@ class ExecutionEngine:
             search_results = self.vector_search_fn(
                 entry.concept, entry.node_type, entry.filters, entry.top_k,
             )
-        
-        # entry score 필터: max(min_score, top_score * ratio) 미만 제거
+
+        stats.db_calls += 1
+
+        # ── entry score 필터: max(min_score, top_score * ratio) 미만 제거 ──
         if search_results and (min_score is not None or score_ratio is not None):
             top_score = max(score for _, score in search_results)
             relative_cut = top_score * score_ratio if score_ratio is not None else 0.0
@@ -231,7 +233,6 @@ class ExecutionEngine:
         ids = [rid for rid, score in search_results]
         entry_scores = {rid: score for rid, score in search_results}
 
-        stats.db_calls += 1
         stats.hop_counts.append(len(ids))
 
         logger.info("[Engine] Entry '%s' (%s): %d건", entry.concept, entry.node_type, len(ids))
@@ -335,9 +336,12 @@ class ExecutionEngine:
             if provenance is not None and p_id and p_id in provenance:
                 provenance[rid] = provenance[p_id] + f" -[{hop.relation_concept}]-> {hop.to_type}('{name}')"
 
-            # 저자 정보 매핑 (Researcher -> Paper/Patent/Report)
-            if meta_enrich is not None and p_name and hop.to_type in ("Paper", "Patent", "Report") and hop.from_type == "Researcher":
-                meta_enrich.setdefault(rid, {}).setdefault("authors", set()).add(p_name)
+            # 중간 경유 Researcher 수집
+            if meta_enrich is not None and p_name and hop.from_type == "Researcher":
+                if hop.to_type in ("Paper", "Patent", "Report"):
+                    meta_enrich.setdefault(rid, {}).setdefault("authors", set()).add(p_name)
+                elif hop.to_type == "Organization":
+                    meta_enrich.setdefault(rid, {}).setdefault("researchers", set()).add(p_name)
 
             if not first_found and rid in result_ids[:3]:
                 path_seg += f"('{name}')"
