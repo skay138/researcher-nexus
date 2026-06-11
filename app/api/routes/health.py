@@ -1,4 +1,4 @@
-"""
+﻿"""
 Health & Schema 엔드포인트
 GET /api/v1/health  — 컴포넌트별 상태 확인
 GET /api/v1/schema  — 현재 DB 스키마 조회
@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from api.schemas import HealthComponentStatus, HealthResponse, SchemaResponse
-from core.compiler.schema_registry import SchemaRegistry
+from app.api.schemas import HealthComponentStatus, HealthResponse, SchemaResponse
+from app.core.compiler.schema_registry import SchemaRegistry
 
 if TYPE_CHECKING:
     pass

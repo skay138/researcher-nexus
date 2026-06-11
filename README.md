@@ -46,16 +46,16 @@ User Query
 
 ```
 researcher-nexus/
-├── src/                         # 애플리케이션 소스 코드
+├── app/                         # 소스코드 루트 — import: from app.xxx import ...
 │   ├── main.py                  # 서버 진입점
-│   ├── component_factory.py     # create_engine / create_agent_graph
+│   ├── component_factory.py     # Composition root — 모든 레이어 조립
 │   │
 │   ├── api/                     # FastAPI REST API
-│   │   ├── app.py
+│   │   ├── factory.py           # create_fastapi_app
 │   │   ├── middleware.py        # Correlation ID
 │   │   ├── schemas.py
 │   │   └── routes/
-│   │       ├── health.py        # GET /api/v1/health
+│   │       ├── health.py        # GET /api/v1/health, GET /api/v1/schema
 │   │       └── search.py        # POST /api/v1/agent/query (SSE)
 │   │                            # POST /api/v1/engine/search
 │   │
@@ -87,15 +87,24 @@ researcher-nexus/
 │   │   ├── config_repository.py # 설정 저장소 (Memory / MariaDB)
 │   │   └── in_memory.py         # 인메모리 어댑터 (테스트 전용)
 │   │
-│   └── services/                # 애플리케이션 서비스
-│       ├── agent_graph.py       # LangGraph 4-node 에이전트
-│       └── semantic_tools.py    # execute_dynamic_search / get_details_by_ids
+│   ├── services/                # 애플리케이션 서비스
+│   │   ├── agent_graph.py       # LangGraph 4-node 에이전트
+│   │   ├── semantic_tools.py    # execute_dynamic_search / get_details_by_ids
+│   │   └── tool_result.py       # ToolResult 타입
+│   │
+│   └── static/
+│       └── index.html           # 간단한 UI
 │
-├── tests/                       # pytest 테스트 스위트
+├── tests/
+│   └── test_architecture.py
 ├── scripts/
-│   └── seed_data.py             # Neo4j + Milvus + MariaDB 초기 데이터 적재
-├── docker-compose.yml           # Neo4j + Milvus + MariaDB + Redis 로컬 스택
-├── pytest.ini                   # pythonpath = src
+│   ├── seed_data.py             # Neo4j + Milvus + MariaDB 초기 데이터 적재
+│   └── reset_settings.py        # MariaDB 설정 초기화
+├── docker-compose.yml           # Neo4j + Milvus + MariaDB + Redis + Ollama 로컬 스택
+├── Dockerfile
+├── pyproject.toml
+├── uv.lock
+├── pytest.ini
 └── .env.example
 ```
 
@@ -113,22 +122,22 @@ researcher-nexus/
 
 ### 1. 의존성 설치
 
+[uv](https://docs.astral.sh/uv/getting-started/installation/)가 없으면 먼저 설치:
+
 ```bash
-python -m venv .venv
+pip install uv
+```
 
-# Windows
-.\.venv\Scripts\activate
-# macOS / Linux
-source .venv/bin/activate
-
-pip install -r requirements.txt
+```bash
+uv sync          # 의존성 설치 + .venv 생성
+uv sync --dev    # dev 의존성 포함 (pytest 등)
 ```
 
 ### 2. 환경 설정
 
 ```bash
 cp .env.example .env
-# .env에서 NEO4J_PASSWORD, MARIADB_PASSWORD, REDIS_URL 등 실제 값으로 수정
+# .env에서 NEO4J_PASSWORD, MARIADB_PASSWORD 등 실제 값으로 수정
 ```
 
 ### 3. 인프라 기동 (Docker)
@@ -142,34 +151,32 @@ docker compose ps
 
 ```bash
 # Neo4j + Milvus + MariaDB 모두 시드
-python scripts/seed_data.py
+uv run python scripts/seed_data.py
 
 # 저장소별 개별 시드
-python scripts/seed_data.py --neo4j-only
-python scripts/seed_data.py --milvus-only
-python scripts/seed_data.py --mariadb-only
+uv run python scripts/seed_data.py --neo4j-only
+uv run python scripts/seed_data.py --milvus-only
+uv run python scripts/seed_data.py --mariadb-only
 
 # 데이터 초기화 후 재적재
-python scripts/seed_data.py --clear
+uv run python scripts/seed_data.py --clear
 ```
 
 ### 5. 서버 실행
 
 ```bash
-# 개발 (Windows)
-$env:PYTHONPATH="src"; uvicorn src.main:app --reload
+# 개발 (hot-reload)
+uv run uvicorn app.main:app --reload
 
-# 개발 (macOS/Linux)
-PYTHONPATH=src uvicorn src.main:app --reload
-
-# 또는 직접 실행
-python src/main.py
+# 또는
+uv run python -m app.main
 ```
 
 ### 6. 테스트
 
 ```bash
-pytest tests/ -v
+# DB 불필요 — in_memory 어댑터 사용
+uv run pytest tests/ -v
 ```
 
 ---
@@ -185,9 +192,10 @@ pytest tests/ -v
 | Neo4j | 5687 (Bolt) / 5474 (UI) | 그래프 DB (관계 탐색) |
 | Milvus | 5530 | 벡터 DB (검색 인덱스) |
 | **MariaDB** | **5306** | **Source of truth (노드 원본 데이터 + 시스템 설정)** |
-| Redis | 5379 | 쿼리 캐시 |
+| Redis | 5379 | 쿼리 캐시 + LangGraph 체크포인터 |
 | MinIO | 5001 (UI) | Milvus 오브젝트 스토리지 |
 | etcd | — (내부) | Milvus 메타데이터 |
+| Attu | 5080 | Milvus GUI (`--profile tools` 시만 기동) |
 
 ```bash
 # 전체 스택 기동

@@ -1,4 +1,4 @@
-"""
+﻿"""
 In-Memory DB Adapter (replaces adapters/mock.py)
 - 실제 Neo4j / Milvus 없이 전체 파이프라인 동작 가능
 - 데이터는 외부(shared/fixtures.py 등)에서 주입 — 하드코딩 없음
@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Tuple
 
-from common.types.results import NodeResult
+from app.common.types.results import NodeResult
 
 
 def make_in_memory_adapters(

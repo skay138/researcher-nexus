@@ -1,4 +1,4 @@
-"""
+﻿"""
 Execution Engine
 - QueryPlan을 hop-by-hop으로 실행
 - hop 결과는 entry 벡터 점수를 start_id 경유로 전파하여 정렬·절단 (BeamPruner 미사용)
@@ -13,12 +13,12 @@ from typing import Any, Callable, Dict, Generator, List, Optional
 import logging
 import time
 
-from common.types.query_plan import EntrySearch, FinalFilter, HopSpec, QueryPlan
-from common.types.results import NodeResult, ExecutionStats, LayerTiming
-from common.config.query_config import QueryConfig
-from core.compiler.cypher_compiler import CypherCompiler
-from core.executor.beam_pruner import BeamPruner
-from common.utils.cache import CacheBackend, make_cache_key
+from app.common.types.query_plan import EntrySearch, FinalFilter, HopSpec, QueryPlan
+from app.common.types.results import NodeResult, ExecutionStats, LayerTiming
+from app.common.config.query_config import QueryConfig
+from app.core.compiler.cypher_compiler import CypherCompiler
+from app.core.executor.beam_pruner import BeamPruner
+from app.common.utils.cache import CacheBackend, make_cache_key
 
 
 class _NullCache:

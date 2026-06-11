@@ -1,0 +1,44 @@
+[project]
+name = "researcher-nexus"
+version = "0.1.0"
+description = "논문·특허·보고서·연구자·기관을 연결하는 지식 그래프 기반 멀티홉 검색 에이전트"
+requires-python = ">=3.11"
+dependencies = [
+    # Core
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "langchain-core>=0.2",
+    "langgraph>=0.1",
+    # LLM Providers
+    "langchain-anthropic>=0.1",
+    "langchain-openai>=0.1",
+    "langchain-ollama>=0.1",
+    # API Server
+    "fastapi>=0.100",
+    "uvicorn[standard]>=0.23",
+    "sse-starlette>=1.6",
+    # Logging
+    "python-json-logger>=2.0",
+    # Cache
+    "redis>=5.0",
+    "langgraph-checkpoint-redis>=0.0.4",
+    # DB
+    "neo4j>=5.0",
+    "pymilvus>=2.3",
+    "PyMySQL>=1.1",
+    # Semantic Pruning (없으면 truncate fallback)
+    "sentence-transformers>=2.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0",
+    "httpx>=0.24",
+    "pytest-cov>=4.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

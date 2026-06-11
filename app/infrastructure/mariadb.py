@@ -1,4 +1,4 @@
-"""
+﻿"""
 MariaDB Adapter — 노드 원본 데이터 저장소 (source of truth)
 - 도메인별 테이블 분리: organizations, researchers, projects, papers, patents, reports
 - paper_authors: 논문-저자 역정규화 (JOIN 없이 authors 즉시 반환)
@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 import logging
 import urllib.parse
 
-from common.types.results import NodeResult
+from app.common.types.results import NodeResult
 
 logger = logging.getLogger(__name__)
 

@@ -1,7 +1,7 @@
-"""
+﻿"""
 Neo4j Graph Database Adapter
 사용법:
-    from infrastructure.neo4j import make_graph_query_fn, make_fetch_details_fn
+    from app.infrastructure.neo4j import make_graph_query_fn, make_fetch_details_fn
     from neo4j import GraphDatabase
 
     driver = GraphDatabase.driver(uri, auth=(user, password))
@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 import logging
 import time
 
-from common.types.results import NodeResult
+from app.common.types.results import NodeResult
 
 logger = logging.getLogger(__name__)
 

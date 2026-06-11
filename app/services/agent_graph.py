@@ -1,4 +1,4 @@
-"""
+﻿"""
 LangGraph Agent Graph
 - Planner:        execute_dynamic_search만 사용 — 검색·탐색 전담
 - SearchTools:    Planner 도구 실행 노드
@@ -23,9 +23,9 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.checkpoint.memory import MemorySaver
 
-from core.compiler.schema_registry import SchemaRegistry
-from common.utils.exceptions import LLMError
-from services.tool_result import numbered_search_context
+from app.core.compiler.schema_registry import SchemaRegistry
+from app.common.utils.exceptions import LLMError
+from app.services.tool_result import numbered_search_context
 
 logger = logging.getLogger(__name__)
 
@@ -418,7 +418,7 @@ def make_detail_enricher_node(llm: Any, detail_tools: list):
 
     def detail_enricher_node(state: AgentState) -> dict:
         from langchain_core.messages import AIMessage, HumanMessage
-        from services.tool_result import merge_tool_results
+        from app.services.tool_result import merge_tool_results
 
         # 현재 턴 결과 없으면 직전 턴 결과로 fallback (멀티턴 후속 상세 질문 대응)
         tool_results = _extract_latest_tool_results(state["messages"])
@@ -566,7 +566,7 @@ def build_graph(
 
 def run_query(app, query: str, session_id: str = "default") -> str:
     from langchain_core.messages import HumanMessage
-    from common.config.settings import get_settings
+    from app.common.config.settings import get_settings
 
     initial_state: AgentState = {
         "messages":          [HumanMessage(content=query)],

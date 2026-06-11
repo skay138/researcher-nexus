@@ -1,4 +1,4 @@
-"""
+﻿"""
 FastAPI Application Factory
 - lifespan으로 startup/shutdown 관리
 - CORS, Correlation ID 미들웨어 적용
@@ -16,11 +16,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from api.middleware import CorrelationIDMiddleware
-from api.routes.health import router as health_router
-from api.routes.search import router as search_router
-from common.utils.exceptions import LangGraphBaseError
-from common.config.settings import Settings, get_settings
+from app.api.middleware import CorrelationIDMiddleware
+from app.api.routes.health import router as health_router
+from app.api.routes.search import router as search_router
+from app.common.utils.exceptions import LangGraphBaseError
+from app.common.config.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings: Settings = app.state.settings
 
     # ── Startup ───────────────────────────────────────────────────────────────
-    from common.utils.logging import configure_logging
+    from app.common.utils.logging import configure_logging
     configure_logging(settings)
 
     logger.info(
@@ -39,15 +39,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         extra={"environment": settings.environment},
     )
 
-    from component_factory import create_engine, create_agent_graph, make_fetch_details, _open_neo4j, _open_milvus
-    from core.compiler.schema_registry import SchemaRegistry
+    from app.component_factory import create_engine, create_agent_graph, make_fetch_details, _open_neo4j, _open_milvus
+    from app.core.compiler.schema_registry import SchemaRegistry
 
     neo4j_driver = _open_neo4j(settings)
     milvus_client = _open_milvus(settings)
 
     # MariaDB 스키마 초기화 (테이블 없으면 생성)
     try:
-        from infrastructure.mariadb import ensure_schema
+        from app.infrastructure.mariadb import ensure_schema
         ensure_schema(settings.mariadb_url)
     except Exception as e:
         logger.warning("MariaDB schema init failed: %s — fetch_details will use Neo4j fallback", e)
@@ -65,7 +65,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Agent app은 LLM 연결이 필요하므로 초기화 실패 시 degraded 모드로 기동
     try:
-        from component_factory import make_config_repo
+        from app.component_factory import make_config_repo
         repo = make_config_repo(settings)
         app.state.repo = repo
 
@@ -159,17 +159,4 @@ def create_fastapi_app(settings: Optional[Settings] = None) -> FastAPI:
     return app
 
 
-# uvicorn api.app:app 호환용 모듈 레벨 인스턴스
 app = create_fastapi_app()
-
-
-if __name__ == "__main__":
-    import uvicorn
-    s = get_settings()
-    uvicorn.run(
-        "api.app:app",
-        host=s.api_host,
-        port=s.api_port,
-        reload=(s.environment == "development"),
-        log_level=s.log_level.lower(),
-    )

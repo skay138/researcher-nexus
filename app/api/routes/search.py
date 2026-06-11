@@ -1,4 +1,4 @@
-"""
+﻿"""
 Search 엔드포인트
 POST /api/v1/agent/query  — LangGraph 에이전트 (SSE 스트리밍)
 POST /api/v1/engine/search — QueryPlan 직접 실행 (동기)
@@ -14,16 +14,16 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 
-from api.schemas import (
+from app.api.schemas import (
     AgentQueryRequest,
     EngineSearchRequest,
     EngineSearchResponse,
     ExecutionStatsSchema,
     NodeResultSchema,
 )
-from common.utils.exceptions import LangGraphBaseError
-from common.types.query_plan import QueryPlan
-from common.config.query_config import QueryConfig, RequestConfig
+from app.common.utils.exceptions import LangGraphBaseError
+from app.common.types.query_plan import QueryPlan
+from app.common.config.query_config import QueryConfig, RequestConfig
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Search"])
@@ -146,7 +146,7 @@ async def _stream_agent(
         all_messages = current_state.values.get("messages", [])
         
         from langchain_core.messages import ToolMessage, HumanMessage
-        from services.tool_result import extract_sources_from_tool_results
+        from app.services.tool_result import extract_sources_from_tool_results
 
         # 현재 턴(마지막 HumanMessage 이후)의 ToolMessage만 sources로 사용
         human_positions = [i for i, m in enumerate(all_messages) if isinstance(m, HumanMessage)]

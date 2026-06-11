@@ -1,7 +1,7 @@
-"""
+﻿"""
 Milvus Vector Database Adapter — Hybrid Search (Dense COSINE + BM25)
 사용법:
-    from infrastructure.milvus import make_vector_search_fn
+    from app.infrastructure.milvus import make_vector_search_fn
     from pymilvus import MilvusClient
     from sentence_transformers import SentenceTransformer
 
@@ -37,7 +37,7 @@ def make_vector_get_by_ids_fn(
     Milvus ID 직접 조회 콜백 생성.
     인터페이스: (ids: List[str]) → List[NodeResult]
     """
-    from common.types.results import NodeResult
+    from app.common.types.results import NodeResult
 
     def vector_get_by_ids(ids: List[str]) -> List[NodeResult]:
         if not ids:
@@ -92,7 +92,7 @@ def make_vector_search_fn(
         top_k: int = 20,
     ) -> List[tuple[str, float]]:
         from pymilvus import AnnSearchRequest
-        from common.config.query_config import RequestConfig
+        from app.common.config.query_config import RequestConfig
         cfg = RequestConfig.current()
         sparse_weight = cfg.sparse_weight
         dense_weight  = cfg.dense_weight

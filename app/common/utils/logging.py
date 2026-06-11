@@ -1,4 +1,4 @@
-"""
+﻿"""
 구조화 로깅 설정
 - production: JSON 포맷 (ELK/CloudWatch 등 로그 집계 시스템 호환)
 - development: 가독성 포맷 (색상 없음, 타임스탬프 포함)
@@ -11,7 +11,7 @@ import sys
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from common.config.settings import Settings
+    from app.common.config.settings import Settings
 
 
 class HealthCheckFilter(logging.Filter):

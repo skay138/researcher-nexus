@@ -1,20 +1,19 @@
-"""
+﻿"""
 Application Factory
 - 모든 컴포넌트를 조립하여 실행 가능한 에이전트 반환
 - LangGraph 관련 임포트는 지연 로딩 → Core 레이어 단독 테스트 가능
 """
 
 from __future__ import annotations
-from typing import Optional
 import logging
 import time
 
-from core.compiler.schema_registry import SchemaRegistry
-from core.compiler.cypher_compiler import CypherCompiler
-from core.executor.beam_pruner import BeamPruner
-from core.executor.execution_engine import ExecutionEngine
-from common.utils.cache import make_cache
-from common.config.query_config import RequestConfig
+from app.core.compiler.schema_registry import SchemaRegistry
+from app.core.compiler.cypher_compiler import CypherCompiler
+from app.core.executor.beam_pruner import BeamPruner
+from app.core.executor.execution_engine import ExecutionEngine
+from app.common.utils.cache import make_cache
+from app.common.config.query_config import RequestConfig
 logger = logging.getLogger(__name__)
 
 
@@ -77,9 +76,9 @@ def make_config_repo(settings=None, overrides=None):
     - 미설정 시 MemoryConfigRepository (fallback)
     """
     if settings and getattr(settings, "mariadb_url", None):
-        from infrastructure.config_repository import MariaDBConfigRepository
+        from app.infrastructure.config_repository import MariaDBConfigRepository
         return MariaDBConfigRepository(settings.mariadb_url, overrides)
-    from infrastructure.config_repository import MemoryConfigRepository
+    from app.infrastructure.config_repository import MemoryConfigRepository
     return MemoryConfigRepository(overrides)
 
 
@@ -95,11 +94,13 @@ def create_engine(
     core/LLM 기본 설정은 config_repo(DB)에서 읽는다.
     """
     if settings is None:
-        from common.config.settings import get_settings
+        from app.common.config.settings import get_settings
         settings = get_settings()
 
     repo = config_repo or make_config_repo(settings)
     beam_width = RequestConfig._resolve(repo).beam_width
+    if beam_width is None:
+        beam_width = 20
 
     if neo4j_driver is None:
         neo4j_driver = _open_neo4j(settings)
@@ -128,8 +129,8 @@ def create_engine(
         ttl=settings.cache_ttl_seconds,
     )
 
-    from infrastructure.neo4j import make_graph_query_fn
-    from infrastructure.milvus import make_vector_search_fn, make_vector_get_by_ids_fn
+    from app.infrastructure.neo4j import make_graph_query_fn
+    from app.infrastructure.milvus import make_vector_search_fn, make_vector_get_by_ids_fn
 
     graph_fn          = make_graph_query_fn(neo4j_driver)
     vector_fn         = make_vector_search_fn(milvus_client, embedding_fn=_embedding_fn)
@@ -154,10 +155,10 @@ def make_fetch_details(settings, neo4j_driver=None) -> object:
     - 미설정 시 Neo4j fallback (개발/임시)
     """
     if settings and getattr(settings, "mariadb_url", None):
-        from infrastructure.mariadb import make_fetch_details_fn
+        from app.infrastructure.mariadb import make_fetch_details_fn
         logger.info("fetch_details → MariaDB: %s", settings.mariadb_url.split("@")[-1])
         return make_fetch_details_fn(settings.mariadb_url)
-    from infrastructure.neo4j import make_fetch_details_fn
+    from app.infrastructure.neo4j import make_fetch_details_fn
     logger.warning("fetch_details → Neo4j fallback (mariadb_url 미설정)")
     return make_fetch_details_fn(neo4j_driver)
 
@@ -174,8 +175,8 @@ def create_agent_graph(
     Returns:
         agent (CompiledGraph)
     """
-    from services.agent_graph import build_graph
-    from services.semantic_tools import make_semantic_tools
+    from app.services.agent_graph import build_graph
+    from app.services.semantic_tools import make_semantic_tools
 
     schema_registry = engine.compiler.schema_registry
     defaults = RequestConfig._resolve(config_repo)

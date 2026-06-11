@@ -1,4 +1,4 @@
-"""
+﻿"""
 Cypher Compiler
 - QueryPlan → 실행 가능한 Cypher 쿼리 (결정론적, LLM 개입 없음)
 - hop별 LIMIT 강제 (hop explosion 1차 방어선)
@@ -10,9 +10,9 @@ from typing import Optional, List
 import logging
 import re
 
-from common.types.query_plan import HopDirection, HopSpec, QueryPlan
-from core.compiler.schema_registry import SchemaRegistry
-from common.utils.exceptions import CypherInjectionDetected, UnknownRelationConcept
+from app.common.types.query_plan import HopDirection, HopSpec, QueryPlan
+from app.core.compiler.schema_registry import SchemaRegistry
+from app.common.utils.exceptions import CypherInjectionDetected, UnknownRelationConcept
 
 logger = logging.getLogger(__name__)
 

@@ -1,4 +1,4 @@
-"""
+﻿"""
 MariaDB system_config 테이블의 값을 기본값(CONFIG_DEFAULTS)으로 초기화하는 스크립트.
 기존에 변경된 설정이 있더라도 모두 무시하고 소스코드의 기본값으로 덮어씁니다.
 """
@@ -12,9 +12,9 @@ import os
 root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(root_dir, "src"))
 
-from common.config.settings import get_settings
-from common.config.query_config import CONFIG_DEFAULTS
-from infrastructure.mariadb import _parse_url
+from app.common.config.settings import get_settings
+from app.common.config.query_config import CONFIG_DEFAULTS
+from app.infrastructure.mariadb import _parse_url
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

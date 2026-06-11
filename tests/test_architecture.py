@@ -1,4 +1,4 @@
-"""
+﻿"""
 테스트 스위트
 - 4개 아키텍처 문제에 대한 검증 테스트
 - Mock 어댑터를 사용하므로 실제 DB 불필요
@@ -8,8 +8,8 @@
 import json
 import pytest
 
-from common.utils.fixtures import SEED_NODES as MOCK_NODES, SEED_RELATIONS as MOCK_RELATIONS
-from infrastructure.in_memory import make_in_memory_adapters as _make_adapters
+from app.common.utils.fixtures import SEED_NODES as MOCK_NODES, SEED_RELATIONS as MOCK_RELATIONS
+from app.infrastructure.in_memory import make_in_memory_adapters as _make_adapters
 mock_vector_search, mock_graph_query, mock_get_by_ids, mock_fetch_details = _make_adapters(MOCK_NODES, MOCK_RELATIONS)
 
 
@@ -19,25 +19,25 @@ mock_vector_search, mock_graph_query, mock_get_by_ids, mock_fetch_details = _mak
 
 @pytest.fixture
 def schema_registry():
-    from core.compiler.schema_registry import SchemaRegistry
+    from app.core.compiler.schema_registry import SchemaRegistry
     return SchemaRegistry(driver=None)
 
 
 @pytest.fixture
 def compiler(schema_registry):
-    from core.compiler.cypher_compiler import CypherCompiler
+    from app.core.compiler.cypher_compiler import CypherCompiler
     return CypherCompiler(schema_registry=schema_registry)
 
 
 @pytest.fixture
 def pruner():
-    from core.executor.beam_pruner import BeamPruner
+    from app.core.executor.beam_pruner import BeamPruner
     return BeamPruner(beam_width=3)
 
 
 @pytest.fixture
 def engine(compiler, pruner):
-    from core.executor.execution_engine import ExecutionEngine
+    from app.core.executor.execution_engine import ExecutionEngine
     return ExecutionEngine(
         compiler=compiler,
         pruner=pruner,
@@ -55,7 +55,7 @@ class TestCypherCompiler:
     """동일 입력 → 동일 Cypher (결정론적)"""
 
     def test_compile_is_deterministic(self, compiler):
-        from common.types.query_plan import HopDirection, HopSpec
+        from app.common.types.query_plan import HopDirection, HopSpec
         hop = HopSpec(
             from_type="Project", relation_concept="participation",
             to_type="Researcher", direction=HopDirection.INBOUND,
@@ -65,7 +65,7 @@ class TestCypherCompiler:
                compiler.compile_single_hop(hop, ids, limit=100)
 
     def test_relation_concept_resolved(self, compiler):
-        from common.types.query_plan import HopSpec, HopDirection
+        from app.common.types.query_plan import HopSpec, HopDirection
         hop = HopSpec(
             from_type="Researcher", relation_concept="authored",
             to_type="Paper", direction=HopDirection.OUTBOUND,
@@ -75,15 +75,15 @@ class TestCypherCompiler:
         assert "authored" not in cypher
 
     def test_unknown_relation_raises(self, compiler):
-        from common.utils.exceptions import UnknownRelationConcept
-        from common.types.query_plan import HopSpec, HopDirection
+        from app.common.utils.exceptions import UnknownRelationConcept
+        from app.common.types.query_plan import HopSpec, HopDirection
         hop = HopSpec(from_type="A", relation_concept="nonexistent_xyz",
                       to_type="B", direction=HopDirection.OUTBOUND)
         with pytest.raises(UnknownRelationConcept):
             compiler.compile_single_hop(hop, ["id_1"], limit=10)
 
     def test_direction_inbound_arrow(self, compiler):
-        from common.types.query_plan import HopSpec, HopDirection
+        from app.common.types.query_plan import HopSpec, HopDirection
         hop = HopSpec(
             from_type="Organization", relation_concept="belongs_to",
             to_type="Researcher", direction=HopDirection.INBOUND,
@@ -92,8 +92,8 @@ class TestCypherCompiler:
         assert "<-[" in cypher
 
     def test_filter_injection_blocked(self, compiler):
-        from common.types.query_plan import HopSpec, HopDirection
-        from common.utils.exceptions import CypherInjectionDetected
+        from app.common.types.query_plan import HopSpec, HopDirection
+        from app.common.utils.exceptions import CypherInjectionDetected
         hop = HopSpec(
             from_type="Project", relation_concept="participation",
             to_type="Researcher", direction=HopDirection.INBOUND,
@@ -121,7 +121,7 @@ class TestHopExplosion:
 
     def test_query_plan_max_hops_enforced(self):
         from pydantic import ValidationError
-        from common.types.query_plan import EntrySearch, HopDirection, HopSpec, QueryPlan
+        from app.common.types.query_plan import EntrySearch, HopDirection, HopSpec, QueryPlan
         too_many = [
             HopSpec(from_type="A", relation_concept="participation",
                     to_type="B", direction=HopDirection.OUTBOUND)
@@ -134,7 +134,7 @@ class TestHopExplosion:
             )
 
     def test_cypher_has_limit_per_hop(self, compiler):
-        from common.types.query_plan import HopSpec, HopDirection
+        from app.common.types.query_plan import HopSpec, HopDirection
         hop = HopSpec(from_type="Project", relation_concept="participation",
                       to_type="Researcher", direction=HopDirection.INBOUND)
         cypher = compiler.compile_single_hop(hop, ["proj_101"], limit=500)
@@ -177,11 +177,11 @@ class TestSemanticTools:
     """execute_dynamic_search 도구 캡슐화 및 동작 검증"""
 
     def setup_method(self):
-        from core.compiler.schema_registry import SchemaRegistry
-        from core.compiler.cypher_compiler import CypherCompiler
-        from core.executor.beam_pruner import BeamPruner
-        from core.executor.execution_engine import ExecutionEngine
-        from services.semantic_tools import make_semantic_tools
+        from app.core.compiler.schema_registry import SchemaRegistry
+        from app.core.compiler.cypher_compiler import CypherCompiler
+        from app.core.executor.beam_pruner import BeamPruner
+        from app.core.executor.execution_engine import ExecutionEngine
+        from app.services.semantic_tools import make_semantic_tools
         engine = ExecutionEngine(
             compiler=CypherCompiler(SchemaRegistry()),
             pruner=BeamPruner(beam_width=50),
@@ -234,10 +234,10 @@ class TestSemanticTools:
 class TestIntegration:
 
     def setup_method(self):
-        from core.compiler.schema_registry import SchemaRegistry
-        from core.compiler.cypher_compiler import CypherCompiler
-        from core.executor.beam_pruner import BeamPruner
-        from core.executor.execution_engine import ExecutionEngine
+        from app.core.compiler.schema_registry import SchemaRegistry
+        from app.core.compiler.cypher_compiler import CypherCompiler
+        from app.core.executor.beam_pruner import BeamPruner
+        from app.core.executor.execution_engine import ExecutionEngine
         self.engine = ExecutionEngine(
             compiler=CypherCompiler(SchemaRegistry()),
             pruner=BeamPruner(beam_width=50),
@@ -247,7 +247,7 @@ class TestIntegration:
         )
 
     def test_complex_4hop_query(self):
-        from common.types.query_plan import (
+        from app.common.types.query_plan import (
             EntrySearch, FinalFilter, HopDirection, HopSpec, QueryPlan,
         )
         plan = QueryPlan(
@@ -274,7 +274,7 @@ class TestIntegration:
         assert stats.total_elapsed_s > 0
 
     def test_execution_stats_collected(self):
-        from common.types.query_plan import EntrySearch, QueryPlan
+        from app.common.types.query_plan import EntrySearch, QueryPlan
         plan = QueryPlan(
             entry_search=EntrySearch(concept="해양", node_type="Project"),
             max_results=5,
@@ -306,7 +306,7 @@ class TestPatentReportDomain:
             assert rel in MOCK_RELATIONS, f"관계 '{rel}'이 MOCK_RELATIONS에 없음"
 
     def test_schema_includes_patent_report(self):
-        from core.compiler.schema_registry import SchemaRegistry
+        from app.core.compiler.schema_registry import SchemaRegistry
         text = SchemaRegistry(driver=None).get_schema_for_llm()
         assert "Patent" in text
         assert "Report" in text
@@ -314,14 +314,14 @@ class TestPatentReportDomain:
         assert "PUBLISHED" in text
 
     def test_patent_concept_mapping(self):
-        from core.compiler.schema_registry import SchemaRegistry
+        from app.core.compiler.schema_registry import SchemaRegistry
         r = SchemaRegistry(driver=None)
         assert r.resolve_relation("invented") == "INVENTED"
         assert r.resolve_relation("filed") == "FILED"
         assert r.resolve_relation("produced") == "PRODUCED"
 
     def test_report_concept_mapping(self):
-        from core.compiler.schema_registry import SchemaRegistry
+        from app.core.compiler.schema_registry import SchemaRegistry
         r = SchemaRegistry(driver=None)
         assert r.resolve_relation("authored_report") == "AUTHORED_REPORT"
         assert r.resolve_relation("published") == "PUBLISHED"
@@ -329,11 +329,11 @@ class TestPatentReportDomain:
 
     def test_patent_search_via_tool(self):
         """execute_dynamic_search로 특허 도메인 탐색"""
-        from core.compiler.schema_registry import SchemaRegistry
-        from core.compiler.cypher_compiler import CypherCompiler
-        from core.executor.beam_pruner import BeamPruner
-        from core.executor.execution_engine import ExecutionEngine
-        from services.semantic_tools import make_semantic_tools
+        from app.core.compiler.schema_registry import SchemaRegistry
+        from app.core.compiler.cypher_compiler import CypherCompiler
+        from app.core.executor.beam_pruner import BeamPruner
+        from app.core.executor.execution_engine import ExecutionEngine
+        from app.services.semantic_tools import make_semantic_tools
         engine = ExecutionEngine(
             compiler=CypherCompiler(SchemaRegistry()),
             pruner=BeamPruner(beam_width=50),
@@ -360,7 +360,7 @@ class TestPatentReportDomain:
 class TestCache:
 
     def test_expired_entries_evicted_on_get(self):
-        from common.utils.cache import MemoryCache
+        from app.common.utils.cache import MemoryCache
         import time
         cache = MemoryCache(ttl=0.01)
         cache.set("key1", "value1")
@@ -369,15 +369,15 @@ class TestCache:
         assert "key1" not in cache._store
 
     def test_max_size_eviction(self):
-        from common.utils.cache import MemoryCache
+        from app.common.utils.cache import MemoryCache
         cache = MemoryCache(ttl=300, max_size=3)
         for k in ("a", "b", "c", "d"):
             cache.set(k, 1)
         assert len(cache._store) <= 3
 
     def test_hop_cache_key_includes_context(self):
-        from common.utils.cache import make_cache_key
-        from common.types.query_plan import HopSpec, HopDirection
+        from app.common.utils.cache import make_cache_key
+        from app.common.types.query_plan import HopSpec, HopDirection
         hop = HopSpec(from_type="A", relation_concept="participation",
                       to_type="B", direction=HopDirection.OUTBOUND)
         ids = ["id_1", "id_2"]
@@ -393,10 +393,10 @@ class TestCache:
 class TestCypherSanitization:
 
     def test_malicious_id_raises(self):
-        from core.compiler.cypher_compiler import CypherCompiler
-        from core.compiler.schema_registry import SchemaRegistry
-        from common.utils.exceptions import CypherInjectionDetected
-        from common.types.query_plan import HopSpec, HopDirection
+        from app.core.compiler.cypher_compiler import CypherCompiler
+        from app.core.compiler.schema_registry import SchemaRegistry
+        from app.common.utils.exceptions import CypherInjectionDetected
+        from app.common.types.query_plan import HopSpec, HopDirection
         compiler = CypherCompiler(SchemaRegistry(driver=None))
         hop = HopSpec(from_type="Project", relation_concept="participation",
                       to_type="Researcher", direction=HopDirection.INBOUND)
@@ -406,10 +406,10 @@ class TestCypherSanitization:
             )
 
     def test_malicious_filter_key_raises(self):
-        from core.compiler.cypher_compiler import CypherCompiler
-        from core.compiler.schema_registry import SchemaRegistry
-        from common.utils.exceptions import CypherInjectionDetected
-        from common.types.query_plan import HopSpec, HopDirection
+        from app.core.compiler.cypher_compiler import CypherCompiler
+        from app.core.compiler.schema_registry import SchemaRegistry
+        from app.common.utils.exceptions import CypherInjectionDetected
+        from app.common.types.query_plan import HopSpec, HopDirection
         compiler = CypherCompiler(SchemaRegistry(driver=None))
         hop = HopSpec(
             from_type="Project", relation_concept="participation",
@@ -420,9 +420,9 @@ class TestCypherSanitization:
             compiler.compile_single_hop(hop, ["proj_101"], limit=10)
 
     def test_safe_ids_pass(self):
-        from core.compiler.cypher_compiler import CypherCompiler
-        from core.compiler.schema_registry import SchemaRegistry
-        from common.types.query_plan import HopSpec, HopDirection
+        from app.core.compiler.cypher_compiler import CypherCompiler
+        from app.core.compiler.schema_registry import SchemaRegistry
+        from app.common.types.query_plan import HopSpec, HopDirection
         compiler = CypherCompiler(SchemaRegistry(driver=None))
         hop = HopSpec(from_type="Project", relation_concept="participation",
                       to_type="Researcher", direction=HopDirection.INBOUND)

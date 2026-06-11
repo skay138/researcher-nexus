@@ -1,4 +1,4 @@
-"""
+﻿"""
 Config Repository
 - MemoryConfigRepository: 인메모리 (테스트 / MariaDB 미연결 fallback)
 - MariaDBConfigRepository: system_config 테이블 기반 영속 저장소
@@ -12,7 +12,7 @@ import json
 import logging
 from typing import Any, Dict, Optional
 
-from common.config.query_config import CONFIG_DEFAULTS
+from app.common.config.query_config import CONFIG_DEFAULTS
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ class MariaDBConfigRepository:
     """
 
     def __init__(self, mariadb_url: str, overrides: Optional[Dict[str, Any]] = None):
-        from infrastructure.mariadb import _parse_url
+        from app.infrastructure.mariadb import _parse_url
         import pymysql
         import pymysql.cursors
 

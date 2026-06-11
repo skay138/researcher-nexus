@@ -172,6 +172,7 @@ services:
       LLM_BASE_URL: http://ollama:11434
     volumes:
       - .:/app                               # 소스 마운트 → ENVIRONMENT=development 시 hot-reload
+      - nexus_venv:/app/.venv                # 이미지에서 빌드한 .venv 보호 (bind mount에 의한 덮어쓰기 방지)
       - nexus_hf_cache:/root/.cache/huggingface  # HuggingFace 모델 캐시 (재시작 시 재다운로드 방지)
     depends_on:
       neo4j:
@@ -214,5 +215,6 @@ volumes:
   nexus_minio_data:
   nexus_milvus_data:
   nexus_redis_data:
-  nexus_hf_cache:    # HuggingFace 모델 캐시 (SentenceTransformer) 
+  nexus_venv:        # API 컨테이너 Python 가상환경 (이미지 빌드 시 생성, 소스 마운트에서 보호)
+  nexus_hf_cache:    # HuggingFace 모델 캐시 (SentenceTransformer)
   nexus_ollama_data:   # Ollama 모델 캐시

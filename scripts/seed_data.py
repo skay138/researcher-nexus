@@ -1,4 +1,4 @@
-"""
+﻿"""
 데이터 시드 스크립트 — Neo4j + Milvus + MariaDB에 샘플 데이터 적재
 사용법:
     python scripts/seed_data.py
@@ -18,8 +18,8 @@ import os
 root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(root_dir, "src"))
 
-from common.config.settings import get_settings
-from common.utils.fixtures import SEED_NODES, SEED_RELATIONS
+from app.common.config.settings import get_settings
+from app.common.utils.fixtures import SEED_NODES, SEED_RELATIONS
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -72,7 +72,7 @@ def seed_neo4j(driver, clear: bool = False) -> None:
 # ────────────────────────────────────────────────────────────────────────────
 
 def seed_milvus(client, embedding_fn, clear: bool = False) -> None:
-    from infrastructure.milvus import ensure_collection, COLLECTION_NAME
+    from app.infrastructure.milvus import ensure_collection, COLLECTION_NAME
 
     logger.info("Milvus 시드 시작 (clear=%s)", clear)
 
@@ -118,7 +118,7 @@ def seed_milvus(client, embedding_fn, clear: bool = False) -> None:
 # ────────────────────────────────────────────────────────────────────────────
 
 def seed_mariadb(mariadb_url: str, clear: bool = False) -> None:
-    from infrastructure.mariadb import ensure_schema, seed_nodes
+    from app.infrastructure.mariadb import ensure_schema, seed_nodes
 
     logger.info("MariaDB 시드 시작 (clear=%s)", clear)
     ensure_schema(mariadb_url)
